@@ -2,8 +2,37 @@
  * Title: camera-init.c
  * Author(s): Zachary John Susag - Grinnell College
  * Date Created: June 23, 2016
- * Date Revised: August  3, 2016
- * Purpose: Create an encrypted database using the ChaCha20 stream cipher.
+ * Date Revised: August  5, 2016
+ * Purpose: The overarching purpose of this program is to initialize a "camera"
+ *          directory which will serve as the encrypted, backup directory. The
+ *          user provides a set of files, or directories, using the appropriate
+ *          command line options which will then be used as a starting point
+ *          for the encrypted directory. If the user provides a directory as an
+ *          input, every file within that directory and all subdirectories will
+ *          be used. Here is an overview of the steps the program takes to
+ *          encrypt each file.
+ *          * Parse the command line options.
+ *          * Open the metadata files, overwriting files that currently exist.
+ *          * Collect the full pathnames of the files and directories to be
+ *            backed up.
+ *          * Take the contents of each file and hash them, serving as the name
+ *            of the encrypted file, collecting and storing the metadata in the
+ *            appropriate data structures.
+ *          * Encrypt each file using the ChaCha20 stream cipher, unless it
+ *            would be redundant to do so.
+ *          * Write the formatted metadata into plaintext streams.
+ *          * Encrypt the metadata streams and write them to disk.
+ *          * Clean up.
+ *         It is important to note that this program does not check to see if
+ *         there are contents within a "camera" directory other than the
+ *         necessary subdirectories which are created within. Thus, multiple
+ *         calls to this program will result in "snapshots" of the files that
+ *         were desired to be backed up, rewriting the metadata files completely
+ *         and possibly leaving remnants of previous backups (e.g. files that
+ *         were deleted between the present and the last call to camera-init).
+ *         
+ *         For an incremental update to an already created directory, use
+ *         camera-update.
  *******************************************************************************
  * Copyright (C) 2016 Zachary John Susag
  * This file is part of Camera.
@@ -37,6 +66,14 @@
 #include <argp.h>
 #include "camera.h"
 
+/* dirCount is the count of the number of directories
+   that the database files have metadata information for.
+   dirStream is the plaintext stream that all data concerning the
+   metadata information for the directories.
+   The reasoning behind having these as global variables
+   is that due to the implementation of binary trees in the
+   GNU C library the "walking" function has to have a specific signature
+   which disallows just passing in the variables as needed. */
 unsigned int dirCount;
 streamStruct dirStream;
 
@@ -192,7 +229,7 @@ int main(int argc, char *argv[])
          then call the function "fileFinder" to recursively
          add the pathnames of the files within "inputDir" and
          its subdirectories to "filesTBE" */
-      sortInput(arguments.files[i], filesTBE);
+      collectFilesTBE(arguments.files[i], filesTBE);
     }
   }
   /* If the user provided a file which
@@ -208,7 +245,7 @@ int main(int argc, char *argv[])
     }
     char *buffer = NULL;
     while ( readline(&buffer, fpInput) != -1) {
-      sortInput(buffer, filesTBE);
+      collectFilesTBE(buffer, filesTBE);
     }
     sodium_memzero(buffer, sizeof(buffer));
     free(buffer);
@@ -234,9 +271,9 @@ int main(int argc, char *argv[])
   system(uniqCommand);
   free(uniqCommand);
   /* Count how many lines are in
-filesTBE as this might have changed
-after duplicate entries are found and
-removed. */
+     filesTBE as this might have changed
+     after duplicate entries are found and
+     removed. */
   char ch;
   while(!feof(filesTBE)) {
     ch = fgetc(filesTBE);
@@ -278,7 +315,7 @@ removed. */
   fprintf(metadataStream.stream, "HASH%28s\tINODE\t\tDEVICE\tMODE\tUID\tGUID\tACC.TIME\tMODTIME\t\tPATHNAME\n", " ");
   fprintf(dirStream.stream, "INODE\t\tDEVICE\tMODE\tUID\tGUID\tACC.TIME\tMODTIME\t\tDIRNAME\n");
   fprintf(nonceStream.stream, "HASH%28s\tNONCE\n", " ");
-  fprintf(countStream.stream, "# OF ENTRIES\n");
+  fprintf(countStream.stream, "ENTRY TYPE\tNUMBER OF ENTRIES\n");
   
   /* For every entry within "hashDb", 
      print out the contents of the array
@@ -309,13 +346,14 @@ removed. */
      tree containing the metadata on the
      directories in-order. During this walk-through
      the data will be formatted and printed
-     to the directoriesSream. */
+     to the dirStream. */
   twalk(dirTree, walkDirTree);
 
   /* Print the count of how many entries are
      within the "hashes-metadata" and
      "directories-map" database files. */
-  fprintf(countStream.stream, "%d\n%d\n", cursor, dirCount);
+  fprintf(countStream.stream, "%s\t%d\n", "Hash metadata", cursor);
+  fprintf(countStream.stream, "%s\t%d\n", "Directory count", dirCount);
 
   /* Rewind the streams before having the data
      read from them */

@@ -2,7 +2,7 @@
  * Title: camera-decrypt.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: June 30, 2016
- * Date Revised: August  3, 2016
+ * Date Revised: August  5, 2016
  * Purpose: Decrypt files within an encrypted backup.
  *******************************************************************************
  * Copyright (C) 2016 Zachary John Susag
@@ -143,14 +143,15 @@ int main(int argc, char *argv[])
      file */
   char *countBuffer = NULL;
   readline(&countBuffer, countStream.stream);
-  if (strncmp(countBuffer, "# OF ENTRIES", strlen("# OF ENTRIES")) != 0) {
+  if (strncmp(countBuffer, "ENTRY TYPE", strlen("ENTRY TYPE")) != 0) {
     fprintf(stderr, "Entered wrong secret key.\nExiting...\n");
     cryptoFree(countBuffer);
     return EXIT_FAILURE;
   }
   cryptoFree(countBuffer);
   readline(&countBuffer, countStream.stream);
-  size_t entryCounter = strtol(countBuffer, NULL, 10);
+  char *countToken = strchr(countBuffer, '\t') + 1;
+  size_t entryCounter = strtol(countToken, NULL, 10);
   cryptoFree(countBuffer);
   /* Create the hash table used to store each file's pathname
      and associated hash. Hash tables are most effective when they are
@@ -250,7 +251,8 @@ int main(int argc, char *argv[])
   /* Retrieve the number of entries within
      the directories database file */
   readline(&countBuffer,  countStream.stream);
-  size_t dirCounter = strtol(countBuffer, NULL, 10);
+  countToken = strchr(countBuffer, '\t') + 1;
+  size_t dirCounter = strtol(countToken, NULL, 10);
 
   /* Zero out the buffer used to read in the data
      from the "database-count" file before freeing

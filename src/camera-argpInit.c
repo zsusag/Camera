@@ -2,7 +2,7 @@
  * Title: camera-argpInit.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: July 11, 2016
- * Date Revised: August  3, 2016
+ * Date Revised: August  5, 2016
  * Purpose: Uses Argp from the GNU C library to parse command line options for
  *          camera-init.
  *******************************************************************************
@@ -38,7 +38,7 @@ static char docInit[] =
   "Initialize an encrypted backup directory using the ChaCha20 stream cipher";
 
 /* Description of arguments that are accepted for camera-init. */
-static char argsDocInit[] = "OUTPUT_DIR [FILES...]";
+static char argsDocInit[] = "OUTPUT_DIR [FILES/DIRs...]";
 
 /* Options for camera-init. */
 static struct argp_option optionsInit[] = {

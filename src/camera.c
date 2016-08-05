@@ -762,7 +762,7 @@ void cryptoFree(void *data) {
   data = NULL;
 }
 
-void sortInput(char *pathname, FILE *outputFile) {
+void collectFilesTBE(char *pathname, FILE *outputFile) {
   if (pathname[strlen(pathname) - 1] == '/') {
     fileFinder(pathname, outputFile);
   }

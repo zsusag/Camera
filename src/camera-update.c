@@ -2,7 +2,7 @@
  * Title: camera-update.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: July  1, 2016
- * Date Revised: August  3, 2016
+ * Date Revised: August  5, 2016
  * Purpose: Add and/or remove files from a previously created encrypted backup.
  *******************************************************************************
  * Copyright (C) 2016 Zachary John Susag
@@ -259,13 +259,14 @@ int main(int argc, char *argv[])
   */
   char *buffer = NULL;
   readline(&buffer, countStream.stream);
-  if (strncmp(buffer, "# OF ENTRIES", strlen("# OF ENTRIES")) != 0) {
+  if (strncmp(buffer, "ENTRY TYPE", strlen("ENTRY TYPE")) != 0) {
     fprintf(stderr, "Entered wrong secret key.\nExiting...\n");
     return EXIT_FAILURE;
   }
   cryptoFree(buffer);
   readline(&buffer, countStream.stream);
-  counter += strtol(buffer, NULL, 10);
+  char *countToken = strchr(buffer, '\t') + 1;
+  counter += strtol(countToken, NULL, 10);
   cryptoFree(buffer);
   if ( hcreate(counter * 1.3) == 0 ) {
     fprintf(stderr, "Error in creating hash table. This is most likely due to insufficient memory.\nExiting ...\n");
@@ -348,7 +349,8 @@ int main(int argc, char *argv[])
     that have been modified or created since the last encrypted backup.
   */
   readline(&buffer, countStream.stream);
-  dirCounter += strtol(buffer, NULL, 10);
+  countToken = strchr(buffer, '\t') + 1;
+  dirCounter += strtol(countToken, NULL, 10);
   cryptoFree(buffer);
   /*
     Declare a storage location for all the information about the databases
@@ -572,7 +574,7 @@ int main(int argc, char *argv[])
   fprintf(metadataStream.stream, "HASH%28s\tINODE\t\tDEVICE\tMODE\tUID\tGUID\tACC.TIME\tMODTIME\t\tPATHNAME\n", " ");
   fprintf(dirStream.stream, "INODE\t\tDEVICE\tMODE\tUID\tGUID\tACC.TIME\tMODTIME\t\tDIRNAME\n");
   fprintf(nonceStream.stream, "HASH%28s\tNONCE\n", " ");
-  fprintf(countStream.stream, "# OF ENTRIES\n");
+  fprintf(countStream.stream, "ENTRY TYPE\tNUMBER OF ENTRIES\n");
   /*
     Walk through the binary trees, inorder, printing
     out the information to the appropriate
@@ -582,7 +584,8 @@ int main(int argc, char *argv[])
   finalDirCount = 0;
   twalk(treeHashMetadata, walkHashTree);
   twalk(treeDir, walkDirTree);
-  fprintf(countStream.stream, "%d\n%d\n", finalMetadataCount, finalDirCount);
+  fprintf(countStream.stream, "%s\t%d\n", "Hash metadata", cursor);
+  fprintf(countStream.stream, "%s\t%d\n", "Directory count", dirCounter);
   hdestroy();
   
   rewindStreams(&metadataStream.stream, &nonceStream.stream,

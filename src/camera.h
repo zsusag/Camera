@@ -2,7 +2,7 @@
  * Title: camera.h
  * Author(s): Zachary John Susag - Grinnell College
  * Date Created: June 30, 2016
- * Date Revised: August  3, 2016
+ * Date Revised: August  5, 2016
  * Purpose: Serve as the header file for Camera
  *******************************************************************************
  * Copyright (C) 2016 Zachary John Susag
@@ -26,10 +26,9 @@
 #define CAMERA_H
 
 #define _GNU_SOURCE
-#define NAME_BUFFER 50
 #define NONCE_BYTES crypto_stream_chacha20_NONCEBYTES
 #define NONCE_AS_HEX_SIZE (NONCE_BYTES * 2)
-#define HASH_BYTES (crypto_generichash_BYTES / 2)
+#define HASH_BYTES 16
 #define HASH_AS_HEX_SIZE (HASH_BYTES * 2)
 #define RWX_OWNER_PERM 0700
 #define SPLINTER_LENGTH 2
@@ -44,6 +43,9 @@
 #define ACCESSTIME_LENGTH 10
 #define MODTIME_LENGTH 10
 #define NUM_TAB_CHARS 10
+
+#include <stdlib.h>
+#include <sys/types.h>
 
 /* Names for the database files. Do NOT change if
    you have already constructed a backup using the default
@@ -130,10 +132,11 @@ typedef struct {
 void keyToHash(char *keyString, unsigned char *keyHash, size_t outLen);
 
 /* 
-   This function will convert "hashesDir" into the path
-   for the given hash to be either placed or
-   read from. "outputDir" will be prepended to the
-   path. The result is stored within "hashesDir".
+   This function takes as inputs a full pathname, hashesDir,
+   for the directory containing all the encrypted files,
+   and hash, which is the result of hashing a particular (unencrypted) file.
+   It constructs and returns the full pathname, outputDir, for
+   the corresponding encrypted file.
 */
 void createEncryptedFileName(char *outputDir, char *hashesDir, char *hash); 
 /* 
@@ -182,7 +185,7 @@ ssize_t readline(char **lineptr,  FILE *stream);
 void createOutputDirectory(char *hashesDirPath, char *outputDir, bool verbose, bool init);
 
 /*
-  This function is a sorting function for use with
+  This function is a comparison function for use with
   the GNU C library host of sorting and searching functions,
   such as "qsort" and "bsearch". This specific function
   will compare two hashes contained within a 
@@ -213,13 +216,15 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database,
   key, which will then be stored within the program.
   After the key is stored, the terminal
   is restored to it's previous state with
-  echoing turned on.
+  echoing turned on. Addiditionally, the nonce
+will be created by hashing the key and the result
+will be stored within nonce.
 */
 
 ssize_t getpassSafe (unsigned char *key, unsigned char *nonce);
 
 /*
-  This function is a sorting function for use with
+  This function is a comparison function for use with
   the GNU C library host of sorting and searching functions.
   This particular function is used in conjunction with
   the binary trees present within camera-init and
@@ -409,13 +414,13 @@ void cryptoFree(void *data);
 /*
   This function will determine whether
   pathname is a single file that the user
-  would like to have the corresponding action
+  would like to have the appropriate action
   done to it or if it is a directory. If it is a
   directory, then this function will call
   fileFinder to retrieve all of the files
   within said directory and place each file's path
   into outputFile, one per line.
 */
-void sortInput(char *pathname, FILE *outputFile);
+void collectFilesTBE(char *pathname, FILE *outputFile);
 
 #endif

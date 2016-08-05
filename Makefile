@@ -27,7 +27,7 @@ LDFLAGS=-lm -lsodium
 
 all : camera-init camera-decrypt camera-update
 
-%.o : %.c
+%.o : ./src/%.c
 	${CC} ${CPPFLAGS} ${CFLAGS} ${LDFLAGS} -c $<
 
 camera-init : camera-init.o camera.o camera-argpInit.o
