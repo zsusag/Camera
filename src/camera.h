@@ -403,13 +403,13 @@ void cleanupStreams(streamStruct *metadataStream, streamStruct *nonceStream,
                     streamStruct *dirStream, streamStruct *countStream);
 /*
   This function will zero out
-  the data, free data, and then
+  the "size" bytes, free data, and then
   set data equal to NULL. data
   should have been allocated using
   malloc or realloc in some way as free
   is called.
 */
-void cryptoFree(void *data);
+void cryptoFree(void *data, size_t size);
 
 /*
   This function will determine whether

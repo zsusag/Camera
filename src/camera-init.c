@@ -247,8 +247,7 @@ int main(int argc, char *argv[])
     while ( readline(&buffer, fpInput) != -1) {
       collectFilesTBE(buffer, filesTBE);
     }
-    sodium_memzero(buffer, sizeof(buffer));
-    free(buffer);
+    cryptoFree(buffer, sizeof(buffer));
     fclose(fpInput);
   }
   /* Move back to the beginning of the file for reading. */
@@ -338,8 +337,7 @@ int main(int argc, char *argv[])
             currentHashEntry->guid, (int) currentHashEntry->accessTime,(int)
             currentHashEntry->modTime, currentHashEntry->pathname);
     /* Free the memory as the DB files are being written of each pathname. */
-    sodium_memzero(currentHashEntry->pathname, sizeof(currentHashEntry->pathname));
-    free(currentHashEntry->pathname);
+    cryptoFree(currentHashEntry->pathname, sizeof(currentHashEntry->pathname));
   }
   dirCount = 0;
   /* Walk through the binary

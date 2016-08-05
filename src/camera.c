@@ -2,8 +2,8 @@
  * Title: camera.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: June 30, 2016
- * Date Revised: August  3, 2016
- * Purpose: Provide general functions for Camera
+ * Date Revised: August  5, 2016
+ * Purpose: Provide general functions for the Camera suite of programs.
  *******************************************************************************
  * Copyright (C) 2016 Zachary John Susag
  * This file is part of Camera.
@@ -112,7 +112,7 @@ void fileFinder(char *path, FILE *filesTBE) {
                 //(path[strlen(path) - 1] == '/') ? "%s%s" : "%s/%s",
                 fullPath, entry->d_name);
         fputc('\n', filesTBE);
-        cryptoFree(fullPath);
+        cryptoFree(fullPath, sizeof(fullPath));
       }
     }
   }
@@ -134,7 +134,7 @@ ssize_t readline(char **lineptr, FILE *stream)
       
 void createOutputDirectory(char *cameraDirPath, char *outputDir, bool verbose, bool init) {
   /* 
-     Append directory path with "/camera" for correct directory
+     Append directory path with "/camera/" for correct directory
      to be made
   */
   
@@ -206,9 +206,7 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database, 
     // Check to see if the file can be opened as a readable-binary file.
     if ( (fpInput = fopen(fileName, "rb")) == NULL) {
       fprintf(stderr, "%s can't be opened as a readable-binary file.\n", fileName);
-      sodium_memzero(fileName, sizeof(fileName));
-      free(fileName);
-      fileName = NULL;
+      cryptoFree(fileName, sizeof(fileName));
       continue;
     }
 
@@ -244,10 +242,9 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database, 
     while( (blockLength = fread(block, 1, BLOCK_SIZE, fpInput)) != 0 ) {
       crypto_generichash_update(&state, block, blockLength);
       // Clean up after the hash has been updated.
-      sodium_memzero(block, blockLength);
       blockLength = 0;
     }
-
+    sodium_memzero(block, blockLength);
     crypto_generichash_final(&state, binHash, sizeof(binHash));
 
     sodium_bin2hex(currentHashEntry->hash, HASH_AS_HEX_SIZE + 1, binHash, HASH_BYTES);
@@ -299,7 +296,7 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database, 
        using the sodium_bin2hex function, and concatenate that result
        onto the final string.
     */
-    char outputFileName[DIRECTORY_PATH_LENGTH + outputFileDirectoryLen + 1]; 
+    char outputFileName[DIRECTORY_PATH_LENGTH + outputFileDirectoryLen ]; 
     createEncryptedFileName(outputDir, outputFileName, currentHashEntry->hash);
     
     if (init) {
@@ -313,9 +310,7 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database, 
         cursor++;
         sodium_memzero(outputFileName, sizeof(outputFileName));
         fclose(fpInput);
-        sodium_memzero(fileName, sizeof(fileName));
-        free(fileName);
-        fileName = NULL;
+        cryptoFree(fileName, sizeof(fileName));
         continue;
       }
       hsearch(htableEntry, (ACTION) ENTER);
@@ -325,9 +320,7 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database, 
       if (!silent) {
         fprintf(stderr, "Output file can't be opened. Continuing ...\n");
       }
-      sodium_memzero(fileName, sizeof(fileName));
-      free(fileName);
-      fileName = NULL;
+      cryptoFree(fileName, sizeof(fileName));
       continue;
     }
 
@@ -573,7 +566,7 @@ void dirTimestampUpdater(char *path, char *outputDir, dbEntry *dirDb, size_t dir
 
 int decryptFile(dbEntry *metadataEntry, dbEntry *dirDb, char *backupDir, char *outputDir, unsigned char *key, bool all) {
   size_t hashDirLen = strlen(backupDir);
-  char hashFilePath[hashDirLen + DIRECTORY_PATH_LENGTH + 1];
+  char hashFilePath[hashDirLen + strlen("/camera/") + DIRECTORY_PATH_LENGTH];
   sodium_memzero(hashFilePath, sizeof(hashFilePath));
   createEncryptedFileName(backupDir, hashFilePath,
                           metadataEntry->hash);
@@ -617,7 +610,6 @@ int decryptFile(dbEntry *metadataEntry, dbEntry *dirDb, char *backupDir, char *o
 
 int copyDecryptedFile(dbEntry *metadataEntry, char *inputFile, char *outputDir) {
   char outputFilePath[strlen(outputDir) + strlen(metadataEntry->pathname) + 1];
-  sodium_memzero(outputFilePath, sizeof(outputFilePath));
   strncpy(outputFilePath, outputDir, strlen(outputDir));
   strncat(outputFilePath, metadataEntry->pathname, strlen(metadataEntry->pathname));
 
@@ -684,8 +676,7 @@ the timestamp of %s\n", outputFilePath);
 void addDirToTree(char *dirPath, char *dirCheck, void ** treeDir) {
   struct stat dirAtt = {0};
   stat(dirPath, &dirAtt);
-  // 7 for the \t characters & 1 for the null byte.
-  sprintf(dirCheck, "%u\t%d\t%0o\t%d\t%d\t%d\t%d\t%s",
+   sprintf(dirCheck, "%u\t%d\t%0o\t%d\t%d\t%d\t%d\t%s",
           (unsigned int) dirAtt.st_ino, (int) dirAtt.st_dev, dirAtt.st_mode, dirAtt.st_uid,
           dirAtt.st_gid, (int) dirAtt.st_atime, (int) dirAtt.st_mtime, dirPath);
   char *currentNode;
@@ -697,7 +688,7 @@ void addDirToTree(char *dirPath, char *dirCheck, void ** treeDir) {
   }
 char *convertedNodeCheck = *(char **)currentNodeCheck;
   if (convertedNodeCheck != dirCheck) {
-    cryptoFree(dirCheck);
+    cryptoFree(dirCheck, sizeof(dirCheck));
   }
 }
 
@@ -746,18 +737,14 @@ void cleanupStreams(streamStruct *metadataStream, streamStruct *nonceStream,
   fclose(nonceStream->stream);
   fclose(countStream->stream);
   fclose(dirStream->stream);
-  sodium_memzero(metadataStream->string, metadataStream->size);
-  sodium_memzero(nonceStream->string, nonceStream->size);
-  sodium_memzero(dirStream->string, dirStream->size);
-  sodium_memzero(countStream->string, countStream->size);
-  free(metadataStream->string);
-  free(nonceStream->string);
-  free(dirStream->string);
-  free(countStream->string);
+  cryptoFree(metadataStream->string, metadataStream->size);
+  cryptoFree(nonceStream->string, nonceStream->size);
+  cryptoFree(dirStream->string, dirStream->size);
+  cryptoFree(countStream->string, countStream->size);
 }
 
-void cryptoFree(void *data) {
-  sodium_memzero(data, sizeof(data));
+void cryptoFree(void *data, size_t size) {
+  sodium_memzero(data, size);
   free(data);
   data = NULL;
 }
@@ -769,6 +756,6 @@ void collectFilesTBE(char *pathname, FILE *outputFile) {
   else {
     char *fullFilepath = realpath(pathname, NULL);
     fprintf(outputFile, "%s\n", fullFilepath);
-    cryptoFree(fullFilepath);
+    cryptoFree(fullFilepath, sizeof(fullFilepath));
   }
 }

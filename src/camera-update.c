@@ -263,11 +263,11 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Entered wrong secret key.\nExiting...\n");
     return EXIT_FAILURE;
   }
-  cryptoFree(buffer);
+  cryptoFree(buffer, sizeof(buffer));
   readline(&buffer, countStream.stream);
   char *countToken = strchr(buffer, '\t') + 1;
   counter += strtol(countToken, NULL, 10);
-  cryptoFree(buffer);
+  cryptoFree(buffer, sizeof(buffer));
   if ( hcreate(counter * 1.3) == 0 ) {
     fprintf(stderr, "Error in creating hash table. This is most likely due to insufficient memory.\nExiting ...\n");
     return EXIT_FAILURE;
@@ -306,7 +306,7 @@ int main(int argc, char *argv[])
     */
     if (counter == 0) {
       counter++;
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
       continue;
     }
     bufferStorage[counter - 1] = buffer;
@@ -342,7 +342,7 @@ int main(int argc, char *argv[])
     
     counter++;
   }
-  cryptoFree(buffer);
+  cryptoFree(buffer, sizeof(buffer));
   /*
     Count how many entries are in the directories database
     file and add that result onto the number of pathnames of files
@@ -351,7 +351,7 @@ int main(int argc, char *argv[])
   readline(&buffer, countStream.stream);
   countToken = strchr(buffer, '\t') + 1;
   dirCounter += strtol(countToken, NULL, 10);
-  cryptoFree(buffer);
+  cryptoFree(buffer, sizeof(buffer));
   /*
     Declare a storage location for all the information about the databases
     that will be subsequently organized by another binary tree. Additionally,
@@ -367,7 +367,7 @@ int main(int argc, char *argv[])
   */
   while (readline(&buffer, dirStream.stream) != -1) {
     if (strncmp(buffer, "INODE", 5) == 0) {
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
       continue;
     }
     char *currentNode = treeDirData[dirCounter];
@@ -384,14 +384,14 @@ int main(int argc, char *argv[])
     }
     dirCounter++;
   }
-  cryptoFree(buffer);
+  cryptoFree(buffer, sizeof(buffer));
   /* 
      Read in the current nonce database file and update the contents of the
      metadata/hash binary tree appropriately.
   */
   while (readline(&buffer, nonceStream.stream) != -1) {
     if (strncmp(buffer, "HASH", 4) == 0) {
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
       continue;
     }
     treeNode currentNode;
@@ -406,7 +406,7 @@ int main(int argc, char *argv[])
     treeNode **retrievedNode;
     if( (retrievedNode = tfind(&currentNode, &treeHashMetadata, metadataTreeCmpFunc)) == NULL ) {
       fprintf(stderr, "Could not find hash within tree when there should be entry.\nExiting...\n");
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
       return EXIT_FAILURE;
     }
     treeNode *retrievedNodeData = *retrievedNode;
@@ -417,9 +417,9 @@ int main(int argc, char *argv[])
       as part of the nonce.
     */
     strncpy(retrievedNodeData->nonce, strrchr(buffer, '\t')+1, NONCE_AS_HEX_SIZE);
-    cryptoFree(buffer);
+    cryptoFree(buffer, sizeof(buffer));
   }
-  cryptoFree(buffer);
+  cryptoFree(buffer, sizeof(buffer));
 
   /*
     Open the file for reading that contains the list
@@ -465,7 +465,7 @@ int main(int argc, char *argv[])
                                                   strlen(buffer) + 8)); 
         addDirToTree(buffer, dirCheck, &treeDir);
         cursor++;
-        cryptoFree(buffer);
+        cryptoFree(buffer, sizeof(buffer));
         continue;
       }
       ENTRY modFileEntry;
@@ -476,9 +476,9 @@ int main(int argc, char *argv[])
       else {
         fprintf(fpModifiedFiles,"%s\n", buffer);
       }
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
     }
-    cryptoFree(buffer);
+    cryptoFree(buffer, sizeof(buffer));
     rewind(fpCreatedFiles);
     rewind(fpModifiedFiles);
     /*
@@ -628,7 +628,7 @@ int main(int argc, char *argv[])
     remaining allocated memory.
   */
   for (unsigned int i = 0; i < cursor; i++) {
-    cryptoFree(newlyEncryptedDb[i].pathname);
+    cryptoFree(newlyEncryptedDb[i].pathname, sizeof(newlyEncryptedDb[i].pathname));
   }
   for (int i = 0; i < treeDataSize; i++){
     free(bufferStorage[i]);
@@ -728,7 +728,7 @@ void databaseUpdater(FILE *fpInput, treeNode *treeData, void *treeHashMetadata, 
   char *buffer = NULL;
   while (readline(&buffer, fpInput) != -1) {
     if ((!del) && buffer[strlen(buffer) - 1] == '/') {
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
       continue;
     }
     if (buffer[strlen(buffer) - 1] == '/' && del) {
@@ -737,7 +737,7 @@ void databaseUpdater(FILE *fpInput, treeNode *treeData, void *treeHashMetadata, 
       strncat(checkDir, buffer, strlen(buffer));
       char *resultDir;
       if( (resultDir = tfind(checkDir, &treeDir, dirTreeCmpFunc)) == NULL ) {
-        cryptoFree(buffer);
+        cryptoFree(buffer, sizeof(buffer));
         continue;
       }
       char *resultDirConverted = *(char **)resultDir;
@@ -745,8 +745,8 @@ void databaseUpdater(FILE *fpInput, treeNode *treeData, void *treeHashMetadata, 
         printf("Removing %s from database\n", buffer);
       }
       tdelete(resultDirConverted, &treeDir, dirTreeCmpFunc);
-      cryptoFree(resultDir);
-      cryptoFree(buffer);
+      cryptoFree(resultDir, sizeof(resultDir));
+      cryptoFree(buffer, sizeof(buffer));
       continue;
     }
     ENTRY hashToFind;
@@ -754,7 +754,7 @@ void databaseUpdater(FILE *fpInput, treeNode *treeData, void *treeHashMetadata, 
     ENTRY *retrievedHash;
     if( (retrievedHash = hsearch(hashToFind, (ACTION) FIND)) == NULL) {
       fprintf(stderr, "Could not retrieve hash for %s.\nExiting ...\n", buffer);
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
       exit(EXIT_FAILURE);
     }
     treeNode fileNode;
@@ -765,7 +765,7 @@ void databaseUpdater(FILE *fpInput, treeNode *treeData, void *treeHashMetadata, 
     treeNode **resultHash;
     if( (resultHash = tfind(&fileNode, &treeHashMetadata, metadataTreeCmpFunc)) == NULL ) {
       fprintf(stderr, "Could not update database appropriately.\nExiting...\n");
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
       exit(EXIT_FAILURE);
     }
     treeNode *retrievedNodeHash = *resultHash;
@@ -793,7 +793,7 @@ void databaseUpdater(FILE *fpInput, treeNode *treeData, void *treeHashMetadata, 
       }
       tdelete(retrievedNodeHash, &treeHashMetadata, metadataTreeCmpFunc);
     }
-    cryptoFree(buffer);
+    cryptoFree(buffer, sizeof(buffer));
   }
-  cryptoFree(buffer);
+  cryptoFree(buffer, sizeof(buffer));
 }

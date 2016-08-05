@@ -76,8 +76,7 @@ int main(int argc, char *argv[])
   arguments.backupDir = realpath(arguments.backupDir, NULL);
 
   /* Create the name of the "camera/" directory */
-  char cameraDir[strlen(arguments.backupDir) + strlen("/camera/") +
-                 strlen(HASH_METADATA_DB_NAME) + strlen(HASH_NONCE_DB_NAME)];
+  char cameraDir[strlen(arguments.backupDir) + strlen("/camera/") + 1];
   sodium_memzero(cameraDir, sizeof(cameraDir));
   createOutputDirectory(cameraDir, arguments.backupDir, arguments.verbose, false);
   size_t cameraDirLen = strlen(cameraDir);
@@ -145,14 +144,14 @@ int main(int argc, char *argv[])
   readline(&countBuffer, countStream.stream);
   if (strncmp(countBuffer, "ENTRY TYPE", strlen("ENTRY TYPE")) != 0) {
     fprintf(stderr, "Entered wrong secret key.\nExiting...\n");
-    cryptoFree(countBuffer);
+    cryptoFree(countBuffer, sizeof(countBuffer));
     return EXIT_FAILURE;
   }
-  cryptoFree(countBuffer);
+  cryptoFree(countBuffer, sizeof(countBuffer));
   readline(&countBuffer, countStream.stream);
   char *countToken = strchr(countBuffer, '\t') + 1;
   size_t entryCounter = strtol(countToken, NULL, 10);
-  cryptoFree(countBuffer);
+  cryptoFree(countBuffer, sizeof(countBuffer));
   /* Create the hash table used to store each file's pathname
      and associated hash. Hash tables are most effective when they are
      only using up to 80% of their total storage. I'm being safe
@@ -182,7 +181,7 @@ int main(int argc, char *argv[])
   while ( readline(&buffer, metadataStream.stream) != -1) {
     if (entryCounter == 0) {
       entryCounter++;
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
       continue;
     }
     dbEntry *currentEntry = &metadataDb[entryCounter - 1];
@@ -214,7 +213,7 @@ int main(int argc, char *argv[])
     hsearch(htableEntry, (ACTION) ENTER);
     entryCounter++;
   }
-  cryptoFree(buffer);
+  cryptoFree(buffer, sizeof(buffer));
   /* Read in each line of the "hashes-nonces"
      file. Find each entry within "metadataDb" that
      corresponds to the hash and populate
@@ -224,7 +223,7 @@ int main(int argc, char *argv[])
      of all associated files with the same hash */
   while ( readline(&buffer, nonceStream.stream) != -1) {
     if (strncmp(buffer, "HASH", 4) == 0) {
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
       continue;
     }
     char *token = strtok(buffer, "\t");
@@ -245,9 +244,9 @@ int main(int argc, char *argv[])
     strncpy(retrievedEntry->nonce, token, NONCE_AS_HEX_SIZE);
     nonceCopierNext(metadataDb, retrievedEntry->index + 1, retrievedEntry->hash, retrievedEntry->nonce);
     nonceCopierPrev(metadataDb, retrievedEntry->index - 1, retrievedEntry->hash, retrievedEntry->nonce);
-    cryptoFree(buffer);
+    cryptoFree(buffer, sizeof(buffer));
   }
-  cryptoFree(buffer);
+  cryptoFree(buffer, sizeof(buffer));
   /* Retrieve the number of entries within
      the directories database file */
   readline(&countBuffer,  countStream.stream);
@@ -257,7 +256,7 @@ int main(int argc, char *argv[])
   /* Zero out the buffer used to read in the data
      from the "database-count" file before freeing
      to prevent data leakage */
-  cryptoFree(countBuffer);
+  cryptoFree(countBuffer, sizeof(countBuffer));
 
   /* Declare a storage location to
      store in all the data
@@ -273,7 +272,7 @@ int main(int argc, char *argv[])
   while ( readline(&buffer,  dirStream.stream) != -1) {
     if (dirCounter == 0) {
       dirCounter++;
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
       continue;
     }
     dbEntry *currentDirEntry = &dirDb[dirCounter - 1];
@@ -296,7 +295,7 @@ int main(int argc, char *argv[])
     currentDirEntry->pathname = token;
     dirCounter++;
   }
-  cryptoFree(buffer);
+  cryptoFree(buffer, sizeof(buffer));
   /****************************
    * ENTIRE BACKUP DECRYPTION *
    ****************************/
@@ -366,9 +365,9 @@ int main(int argc, char *argv[])
       char pathCpy[strlen(buffer) + 1];
       strncpy(pathCpy, buffer, strlen(buffer));
       mkdir_p(dirname(pathCpy), arguments.outputDir, dirDb, dirCounter, arguments.verbose);
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
     }
-    cryptoFree(buffer);
+    cryptoFree(buffer, sizeof(buffer));
     rewind(filesTBD);
     /* For every file within "filesTBD", 
        retrieve the hash associated with the
@@ -398,17 +397,17 @@ int main(int argc, char *argv[])
         continue;
       }
       decryptFile(retrievedEntry, metadataDb, arguments.backupDir, arguments.outputDir, key, false);
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
     }
-    cryptoFree(buffer);
+    cryptoFree(buffer, sizeof(buffer));
     rewind(filesTBD);
     /* Restore the time stamps for every directory that
        was created. */
     while (readline(&buffer, filesTBD) != -1) {
       dirTimestampUpdater(dirname(buffer), arguments.outputDir, dirDb, dirCounter);
-      cryptoFree(buffer);
+      cryptoFree(buffer, sizeof(buffer));
     }
-    cryptoFree(buffer);
+    cryptoFree(buffer, sizeof(buffer));
     fclose(filesTBD);
   }
   /* Zero out all of the memory that held
@@ -418,10 +417,10 @@ int main(int argc, char *argv[])
      termination of the program. Destroy the hash
      table as well to prevent memory leakage. */
   for (unsigned int i = 0; i < entryCounter - 1; i++) {
-    cryptoFree(metadataDb[i].metadata);
+    cryptoFree(metadataDb[i].metadata, sizeof(metadataDb[i].metadata));
   }
   for (unsigned int i = 0; i < dirCounter - 1; i++) {
-    cryptoFree(dirDb[i].metadata);
+    cryptoFree(dirDb[i].metadata, sizeof(dirDb[i].metadata));
   }
   sodium_memzero(key, sizeof(key));
   sodium_memzero(buffer, sizeof(buffer));
@@ -434,7 +433,7 @@ int main(int argc, char *argv[])
            arguments.outputDir);
   }
   free(arguments.backupDir);
-  cryptoFree(arguments.outputDir);
+  cryptoFree(arguments.outputDir, sizeof(arguments.outputDir));
   return EXIT_SUCCESS;
 }
 
