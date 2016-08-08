@@ -2,7 +2,7 @@
  * Title: camera.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: June 30, 2016
- * Date Revised: August  5, 2016
+ * Date Revised: August  8, 2016
  * Purpose: Provide general functions for the Camera suite of programs.
  *******************************************************************************
  * Copyright (C) 2016 Zachary John Susag
@@ -96,7 +96,11 @@ void chacha20_xor_file(FILE *fpInput, FILE *fpOutput,
   }
   sodium_memzero(decrypt ? ciphertext : block, BLOCK_SIZE);
 }
+/* Purpose: Compare two hashes stored within the dbEntry structure
+   alphanumerically for use in the qsort procedure.
 
+   Preconditions:
+   * Meant to be called only through one of the GNU C library sorting functions. */
 int hashCompare (const void * a, const void * b)
 {
   dbEntry *A = (dbEntry *)a;
@@ -110,6 +114,13 @@ int hashCompare (const void * a, const void * b)
   return 0;
 }
 
+/* Purpose: For every file in the directory described by path, collect the
+   pathnames for each file within path and all of its subdirectories
+   and print the full pathname, one per line, into filesTBE.
+
+   Preconditions:
+   * path should point to a directory.
+   * filesTBE is opened for writing. */
 void fileFinder(char *path, FILE *filesTBE) {
   DIR *dir;
   struct dirent *entry;
@@ -128,9 +139,7 @@ void fileFinder(char *path, FILE *filesTBE) {
       }
       else if (entry->d_type == DT_REG) {
         char *fullPath = realpath(path, NULL);
-        fprintf(filesTBE, "%s/%s",
-                //(path[strlen(path) - 1] == '/') ? "%s%s" : "%s/%s",
-                fullPath, entry->d_name);
+        fprintf(filesTBE, "%s/%s", fullPath, entry->d_name);
         fputc('\n', filesTBE);
         cryptoFree(fullPath, sizeof(fullPath));
       }
@@ -139,6 +148,12 @@ void fileFinder(char *path, FILE *filesTBE) {
   closedir(dir);
 }
 
+/* Purpose: Read one entire line from stream and store the result
+   in lineptr. Replace the newline character at the end of the
+   line with a null character instead.
+
+   Preconditions:
+   * stream is opened for reading. */
 ssize_t readline(char **lineptr, FILE *stream)
 {
   size_t len = 0;
@@ -151,7 +166,16 @@ ssize_t readline(char **lineptr, FILE *stream)
 
   return chars;
 }
-      
+
+/* Purpose: The main purpose of this function is to construct the full camera
+   directory pathname from the given outputDir and store the result into
+   cameraDirPath. The secondary purpose is that it will create the camera directory,
+   and all subdirectories within, if init is set to true.
+
+   Preconditions:
+   * outputDir points to a directory.
+   * cameraDirPath has memory allocated of at least (strlen(outputDir) + 9) bytes.
+     - 8 for "/camera/" and 1 for the trailing null byte. */
 void createOutputDirectory(char *cameraDirPath, char *outputDir, bool verbose, bool init) {
   /* 
      Append directory path with "/camera/" for correct directory
@@ -207,6 +231,12 @@ void createOutputDirectory(char *cameraDirPath, char *outputDir, bool verbose, b
   }
 }
 
+/* Purpose: Read the contents of each file within filesTBE and generate a hash. Then encrypt
+   the file, saving it in the camera directory which is inside outputDir.
+
+   Preconditions:
+   * filesTBE has a list of pathnames, one per line, of files to be encrypted as is readable.
+   * treeDir is a pointer used for purpose of a binary tree. */
 unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database, unsigned char *key, unsigned int cursor, bool init, void **treeDir, bool verbose, bool silent, int fileCount) {
   FILE * fpInput = NULL;
   FILE * fpOutput = NULL;
@@ -376,6 +406,14 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database, 
   return cursor;
 }
 
+/* Purpose: Turn off echoing to the current terminal, prompting the user
+   to enter the secret key as a string. Once entered, restore the terminal
+   generate the key in hashed form and store it in key, along with the nonce
+   used to encrypt the database files and store that hash in nonce.
+
+   Preconditions: 
+   * key has memory allocated of crypto_stream_chacha20_KEYBYTES bytes.
+   * nonce has memory allocated of NONCE_BYTES*/
 ssize_t getpassSafe (unsigned char *key, unsigned char *nonce) {
   char *keyAsString = NULL;
   struct termios old, new;
@@ -401,10 +439,19 @@ ssize_t getpassSafe (unsigned char *key, unsigned char *nonce) {
   return nread;
 }
 
+/* Purpose: Compare the pathnames stored at the end of two strings, a and b,
+   alphabetically. Designed to be used for the tsearch function from the GNU
+   C library. */
 int dirTreeCmpFunc (const void *a, const void *b) {
   return strcmp( strrchr((char *)a, '\t') + 1, strrchr((char *)b, '\t') + 1);
 }
 
+/* Purpose: If the entries after index within database are of the same hash then
+   copy nonce into the appropriate field within dbEntry.
+
+   Preconditions:
+   * index is less than or equal to one minus the total number of entries database
+     can store. */
 void nonceCopierNext(dbEntry *database, int index, char *hash, char *nonce) {
   dbEntry *currentEntry = &database[index];
   while ( strncmp(currentEntry->hash, hash, HASH_AS_HEX_SIZE) == 0 ) {
@@ -413,6 +460,11 @@ void nonceCopierNext(dbEntry *database, int index, char *hash, char *nonce) {
   }
 }
 
+/* Purpose: If the entries before index within database are of the same hash then
+   copy nonce into the appropriate field within dbEntry.
+
+   Preconditions:
+   * index is greater than 0. */
 void nonceCopierPrev(dbEntry *database, int index, char *hash, char *nonce) {
   dbEntry *currentEntry = &database[index];
   while ( strncmp(currentEntry->hash, hash, HASH_AS_HEX_SIZE) == 0) {
@@ -421,6 +473,13 @@ void nonceCopierPrev(dbEntry *database, int index, char *hash, char *nonce) {
   }
 }
 
+/* Purpose: Parse the information found within token and store the data
+   in the appropriate fields in currentEntry.
+
+   Preconditions:
+   * token should be generated by reading in a non-empty line from either the
+     hashes-metadata or directories-map database files. Regardless, the data
+     needs to be separated by tab characters. */
 void readInDatabase(dbEntry *currentEntry, char *token, bool metadata) {
   if (metadata) {
     token = strtok(NULL,"\t");
@@ -451,6 +510,13 @@ void readInDatabase(dbEntry *currentEntry, char *token, bool metadata) {
          currentEntry->modTime, currentEntry->pathname);
 }
 
+/* Purpose: Mimic the "mkdir -p" command from the bash shell.
+
+   Preconditions:
+   * path should point to a directory that needs to be created.
+   * dirDb should have the necessary data needed to construct
+     the directory structure.
+   * outputDir should point to a directory. */
 int mkdir_p(char *path, char *outputDir, dbEntry *dirDb,
             size_t dirCounter, bool verbose)
 {
@@ -484,13 +550,21 @@ int mkdir_p(char *path, char *outputDir, dbEntry *dirDb,
   return 0;
 }
 
+/* Purpose: Compare two pathnames found within the dbEntry structure alphanumerically.
+   This function was designed to be used by the bsearch function from the GNU C library,
+   hence the name. */
 int bsearchDirCmpFunc(const void *a, const void *b) {
   dbEntry *A = (dbEntry *)a;
   dbEntry *B = (dbEntry *)b;
 
   return strcmp(A->pathname, B->pathname);
 }
-         
+
+/* Purpose: Serve as a helper function to mkdir_p. Actually create the directories
+   and update the permissions accordingly.
+
+   Preconditions:
+* The same preconditions hold here as they do for mkdir_p. */
 void mkdir_pHelper(char *newPath, size_t outputDirLen, dbEntry *dirDb, size_t dirCounter, bool verbose) {
   dbEntry check;
   check.pathname = &newPath[outputDirLen];
@@ -525,6 +599,14 @@ void mkdir_pHelper(char *newPath, size_t outputDirLen, dbEntry *dirDb, size_t di
   }
 }
 
+/* Purpose: Update the access time and the modification time for all the directories
+   found in path.
+
+   Preconditions:
+   * Both path and outputDir should point to directories.
+   * dirCounter needs to be the number of entries within dirDb.
+   * The process in which this function is called should have write permissions to the
+     directory structure it is updating. */
 void dirTimestampUpdater(char *path, char *outputDir, dbEntry *dirDb, size_t dirCounter) {
   size_t outputDirLen = strlen(outputDir); 
   char finalOutputDirPath[outputDirLen +
@@ -583,7 +665,14 @@ void dirTimestampUpdater(char *path, char *outputDir, dbEntry *dirDb, size_t dir
     }
   }
 }
+/* Purpose: Decrypt the file described by metadataEntry and store the decrypted copy into
+   outputDir.
 
+   Preconditions:
+   * metadataEntry is not null.
+   * backupDir points to the camera directory in which the encrypted copy is stored.
+   * outputDir points to a directory in which the decrypted copy is to be stored.
+   * key is crypto_stream_chacha20_KEYBYTES in size. */
 int decryptFile(dbEntry *metadataEntry, dbEntry *dirDb, char *backupDir, char *outputDir, unsigned char *key, bool all) {
   size_t hashDirLen = strlen(backupDir);
   char hashFilePath[hashDirLen + strlen("/camera/") + DIRECTORY_PATH_LENGTH];
@@ -628,6 +717,13 @@ int decryptFile(dbEntry *metadataEntry, dbEntry *dirDb, char *backupDir, char *o
   return nextIndex;
 }
 
+/* Purpose: Copy a decrypted file to another location, byte for byte, in order
+   to increase efficiency by not decrypting the file again.
+
+   Preconditions:
+   * metadataEntry is not null.
+   * inputFile is opened for reading.
+   * outputDir is a directory that the process has writing permissions to. */
 int copyDecryptedFile(dbEntry *metadataEntry, char *inputFile, char *outputDir) {
   char outputFilePath[strlen(outputDir) + strlen(metadataEntry->pathname) + 1];
   strncpy(outputFilePath, outputDir, strlen(outputDir));
@@ -661,6 +757,13 @@ int copyDecryptedFile(dbEntry *metadataEntry, char *inputFile, char *outputDir) 
   return metadataEntry->index + 1;
 }
 
+/* Purpose: Update the owner, group, permissions, access time and modification time
+   of the file pointed to by outputFilePath with the metadata information coming
+   from metadataEntry.
+
+   Preconditions:
+   * outputFilePath is a file and the process has write permissions for it.
+   * metadataEntry is not null. */
 void updateFileMetadata(dbEntry *metadataEntry, char *outputFilePath) {
   errno = 0;
   if (chown(outputFilePath, metadataEntry->uid, metadataEntry->guid) != 0) {
@@ -693,6 +796,14 @@ the timestamp of %s\n", outputFilePath);
   }
 }
 
+/* Purpose: Collect the metadata for the directory pointed to by dirPath and store
+   the result, along with dirPath in a binary tree pointed to by treeDir.
+
+   Preconditions:
+   * dirCheck has memory allocated of at least (INODE_LENGTH + DEVICE_LENGTH +
+     MODE_LENGTH + GUID_LENGTH + UID_LENGTH + ACCESSTIME_LENGTH + MODTIME_LENGTH + 
+     strlen(dirPath) + 8) bytes.
+   * dirPath is not null.*/
 void addDirToTree(char *dirPath, char *dirCheck, void ** treeDir) {
   struct stat dirAtt = {0};
   stat(dirPath, &dirAtt);
@@ -712,6 +823,17 @@ char *convertedNodeCheck = *(char **)currentNodeCheck;
   }
 }
 
+/* Purpose: Construct the pathnames for the four database files Camera creates.
+
+   Preconditions:
+   * dbHashNoncePath has memory allocated of at least (strlen(cameraDir) +
+     HASH_NONCE_DB_NAME + 1) bytes.
+   * dbHashMetadataPath has memory allocated of at least (strlen(cameraDir) +
+     HASH_METADATA_DB_NAME + 1) bytes.
+   * dbDirPath has memory allocated of at least (strlen(cameraDir) +
+     DIRECTORIES_DB_NAME + 1) bytes.
+   * databaseCountPath has memory allocated of at least (strlen(cameraDir) +
+     DATABASE_ENTRY_COUNT_NAME + 1) bytes. */
 void constructDatabasePaths(char *cameraDir, size_t cameraDirLen, char *dbHashNoncePath,
                             char *dbHashMetadataPath, char *dbDirPath, char *databaseCountPath) {
 
@@ -725,6 +847,8 @@ void constructDatabasePaths(char *cameraDir, size_t cameraDirLen, char *dbHashNo
   strncat(databaseCountPath, DATABASE_ENTRY_COUNT_NAME, strlen(DATABASE_ENTRY_COUNT_NAME));
 }
 
+/* Purpose: Open a file pointed to by filePath with mode, mode, storing the result
+   in fp and print an error message and exit if the file cannot be opened.*/
 void openFile(FILE **fp, char *filePath, char *mode) {
   if ( (*fp = fopen(filePath, mode)) == NULL) {
     fprintf(stderr, "%s cannot be opened.\nExiting...\n", filePath);
@@ -732,6 +856,11 @@ void openFile(FILE **fp, char *filePath, char *mode) {
   }
 }
 
+/* Purpose: Copy the contents of fpInput into fpOutput.
+
+   Preconditions:
+   * fpInput should be opened for reading.
+   * fpOutput should be opened for writing. */
 void createUnencryptedDb(FILE *fpInput, FILE *fpOutput) {
   size_t blockLength = 0;
   unsigned char block[BLOCK_SIZE] = {'\0'};
@@ -743,6 +872,10 @@ void createUnencryptedDb(FILE *fpInput, FILE *fpOutput) {
   sodium_memzero(block, BLOCK_SIZE);
 }
 
+/* Purpose: Rewind each of the four streams to the beginning of the stream.
+
+   Preconditions:
+   * Each of the four streams must be opened in some form. */
 void rewindStreams(FILE **metadataStream, FILE **nonceStream,
                    FILE **dirStream, FILE **countStream) {
   rewind(*metadataStream);
@@ -751,6 +884,10 @@ void rewindStreams(FILE **metadataStream, FILE **nonceStream,
   rewind(*countStream);
 }
 
+/* Purpose: Close each of the streams and securely free the memory of each stream.
+
+   Preconditions:
+   * Each of the four streams must be opened in some form. */
 void cleanupStreams(streamStruct *metadataStream, streamStruct *nonceStream,
                     streamStruct *dirStream, streamStruct *countStream) {
   fclose(metadataStream->stream);
@@ -763,12 +900,23 @@ void cleanupStreams(streamStruct *metadataStream, streamStruct *nonceStream,
   cryptoFree(countStream->string, countStream->size);
 }
 
+/* Purpose: Zero size bytes of data and then free data, resetting its value
+   to NULL.
+
+   Preconditions:
+   * data must have had memory allocated by malloc, calloc, or realloc in some form. */
 void cryptoFree(void *data, size_t size) {
   sodium_memzero(data, size);
   free(data);
   data = NULL;
 }
+/* Purpose: Determine if pathname is a directory or a file. If it is a directory,
+   retrieve each file within pathname and its subdirectories and store the pathnames,
+   one per line, in outputFile. Else, write pathname to outputFile.
 
+   Preconditions:
+   * pathname should not be null.
+   * outputFile should be opened for writing. */
 void collectFilesTBE(char *pathname, FILE *outputFile) {
   if (pathname[strlen(pathname) - 1] == '/') {
     fileFinder(pathname, outputFile);
