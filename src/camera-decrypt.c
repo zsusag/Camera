@@ -2,8 +2,35 @@
  * Title: camera-decrypt.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: June 30, 2016
- * Date Revised: August  5, 2016
- * Purpose: Decrypt files within an encrypted backup.
+ * Date Revised: August  8, 2016
+ * Purpose: This program allows the user to decrypt either certain files or
+ *          the entire backup directory produced by Camera. The decrypted files
+ *          will have exactly the same structure, permissions, owners,
+ *          and timestamps as when they were originally entered into the
+ *          backup directory. Here is an overview of the steps the program takes
+ *          to decrypt each file:
+ *          * Parse the command line options.
+ *          * Open and decrypt the metadata files.
+ *          * For each entry in the "hashes-metadata" file parse the data and
+ *            store the information in an array. Additionally, store each path-
+ *            name and hash in a hash table.
+ *          * Update each entry in the array with the appropriate nonce from the
+ *            "hashes-nonces" database file.
+ *          * For each entry in the "directories-map" file parse the data and
+ *            store the information in an array.
+ *          * If the user wants the entire backup to be decrypted then create
+ *            all the directories recursively, decrypt each file in succession,
+ *            and update the timestamps of the newly created directories after
+ *            the files have been decrypted.
+ *          * Else, compile a list of files that need to be decrypted from the
+ *            options available from the command line options.
+ *          * Using the hash table, find the hash for each pathname and use
+ *            the hash to perform a binary search on the array of metadata
+ *            information. Once retrieved, decrypt the file to the appropriate
+ *            location.
+ *          * Update the timestamp information for the directories that were
+ *            created.
+ *          * Clean up.
  *******************************************************************************
  * Copyright (C) 2016 Zachary John Susag
  * This file is part of Camera.

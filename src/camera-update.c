@@ -2,8 +2,46 @@
  * Title: camera-update.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: July  1, 2016
- * Date Revised: August  5, 2016
- * Purpose: Add and/or remove files from a previously created encrypted backup.
+ * Date Revised: August  8, 2016
+ * Purpose: This program allows the user to manage a backup directory created by
+ *          camera-init. As files are either created, modified (within the
+ *          directory but have since been either changed or renamed), or deleted
+ *          from the filesystem, these changes need to be reflected in the
+ *          backup. This is done by the user  providing 2 files through the
+ *          appropriate command line options: one containing files that have
+ *          since been modified or created and the other containing files that
+ *          have been deleted, one per line for both. Here is an overview of
+ *          the steps the program takes to manage the backup directory:
+ *          * Parse the command line options.
+ *          * Open the encrypted metadata files for reading.
+ *          * Decrypt the metadata files and store the contents in memory
+ *            streams.
+ *          * Get the number of files within the provided modified file.
+ *          * Read in each entry in the "hashes-metadata" file and store the
+ *            data inside of a binary tree. Additionally, store the filepath
+ *            in a hash table along with the associated hash. This is because
+ *            if a file is modified the old entry needs to be deleted from the
+ *            database files.
+ *          * Read in each entry in the "directories-map" file and store the
+ *            data inside of a separate binary tree.
+ *          * Read in each nonce and update the binary tree which has the hash
+ *            of each file with the nonce.
+ *          * For every pathname in the provided "del-file" the corresponding
+ *            entry will be found in the binary tree and removed from said
+ *            binary tree.
+ *          * For every directory listed in the provided "mod-file" the
+ *            directory will be added to the binary tree. The files and subdire-
+ *            ctories within each directory will not be added to the tree,
+ *            however.
+ *          * For every file listed in the provided "mod-file" the file will
+ *            be encrypted and then added to the binary tree. If there exists
+ *            a file with the same pathname in the backup already, the old entry
+ *            will be deleted and replaced by the new file. Additionally,
+ *            files that no longer need to exist in the backup directory will
+ *            be deleted from the backup to conserve disk space.
+ *          * Write the formatted metadata into plaintext streams.
+ *          * Encrypt the metadata streams and write them to disk.
+ *          * Clean up.
  *******************************************************************************
  * Copyright (C) 2016 Zachary John Susag
  * This file is part of Camera.
@@ -304,18 +342,17 @@ int main(int argc, char *argv[])
        is purely informational to the human user, the first
        line is ignored and immediately moves to the next line.
     */
-    if (counter == 0) {
-      counter++;
+    if (strncmp(buffer, "HASH", 4) == 0) {
       cryptoFree(buffer, sizeof(buffer));
       continue;
     }
-    bufferStorage[counter - 1] = buffer;
+    bufferStorage[counter] = buffer;
     /*
-      Populate the "counter - 1" entry of treeData using the data
+      Populate the "counter" entry of treeData using the data
       retrieved from the metadata/hash file.
     */
-    treeNode *currentNode = &treeData[counter - 1];
-    currentNode->index = counter - 1;
+    treeNode *currentNode = &treeData[counter];
+    currentNode->index = counter;
     strncpy(currentNode->hash, buffer, HASH_AS_HEX_SIZE);
     currentNode->hash[HASH_AS_HEX_SIZE] = '\0';
     currentNode->metadata = strchr(buffer, '\t') + 1;
@@ -584,7 +621,7 @@ int main(int argc, char *argv[])
   finalDirCount = 0;
   twalk(treeHashMetadata, walkHashTree);
   twalk(treeDir, walkDirTree);
-  fprintf(countStream.stream, "%s\t%d\n", "Hash metadata", cursor);
+  fprintf(countStream.stream, "%s\t%d\n", "Hash metadata", counter);
   fprintf(countStream.stream, "%s\t%d\n", "Directory count", dirCounter);
   hdestroy();
   
@@ -634,7 +671,7 @@ int main(int argc, char *argv[])
     free(bufferStorage[i]);
   }
   
-  for (int i = tempCounter - 1; i < counter; i++) {
+  for (int i = tempCounter; i < counter; i++) {
     free(treeData[i].metadata);
   }
   tdestroy(treeDir, free);
