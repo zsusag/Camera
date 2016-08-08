@@ -262,7 +262,7 @@ int main(int argc, char *argv[])
     token = strtok(NULL, "\t");
     dbEntry *retrievedEntry;
     if( (retrievedEntry = bsearch(&check, metadataDb, entryCounter - 1,
-                                  sizeof(dbEntry), hashSort)) == NULL) {
+                                  sizeof(dbEntry), hashCompare)) == NULL) {
       fprintf(stderr, "Could not add nonce to digital database from database file \
  on disk. This is a result of either insufficient memory or a corrupted database file.\n");
       fprintf(stderr, "Exiting ...\n");
@@ -418,7 +418,7 @@ int main(int argc, char *argv[])
       strncpy(hashAsDbEntry.hash, retrievedHash->data, HASH_AS_HEX_SIZE);
       dbEntry *retrievedEntry;
       if ( (retrievedEntry = bsearch(&hashAsDbEntry, metadataDb, entryCounter - 1,
-                                     sizeof(dbEntry), hashSort)) == NULL) {
+                                     sizeof(dbEntry), hashCompare)) == NULL) {
         fprintf(stderr, "Could not find %s in database.\nContinuing...\n",
                 buffer);
         continue;

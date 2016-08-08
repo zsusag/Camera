@@ -193,7 +193,7 @@ void createOutputDirectory(char *hashesDirPath, char *outputDir, bool verbose, b
   alphanumeric order.
 */
 
-int hashSort (const void * a, const void * b);
+int hashCompare (const void * a, const void * b);
 
 /*
   This function will take the contents of

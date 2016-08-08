@@ -40,6 +40,14 @@
 #include <utime.h>
 #include "camera.h"
 
+/* Purpose: Take the secret key, keyString, and convert each character
+   into unsigned characters and then hash the key into outLen bytes, storing the
+   result in keyHash.
+   
+   Preconditions: 
+   * keyHash must have at least HASH_BYTES of memory allocated.
+   * Refer to the libsodium documentation for specific conditions
+     for the crypto_generichash function. */
 void keyToHash(char *keyString, unsigned char *keyHash, size_t outLen) {
   size_t keyLen = strlen(keyString);
   unsigned char keyArray[keyLen];
@@ -49,6 +57,12 @@ void keyToHash(char *keyString, unsigned char *keyHash, size_t outLen) {
   crypto_generichash(keyHash, outLen, keyArray, keyLen, NULL, 0);
 }
 
+/* Purpose: Create the full pathname for the encrypted file described
+   by hash.
+
+   Preconditions: 
+   * Storage must be allocated for cameraDir beforehand and must have
+     at least (strlen(outputDir) + HASH_AS_HEX_SIZE + 11) bytes.*/
 void createEncryptedFileName(char *outputDir, char *cameraDir, char *hash) {
   strncpy(cameraDir, outputDir, strlen(outputDir));
   strncat(cameraDir, "/camera/", strlen("/camera/"));
@@ -59,6 +73,12 @@ void createEncryptedFileName(char *outputDir, char *cameraDir, char *hash) {
   strncat(cameraDir, &hash[SPLINTER_LENGTH * 2], HASH_AS_HEX_SIZE - (SPLINTER_LENGTH * 2));
 }
 
+/* Purpose: Use the ChaCha20 stream cipher to xor fpInput and store the result
+   in fpOutput.
+
+   Preconditions:
+   * fpInput must be opened for reading in binary.
+   * fpOutput must be opened for writing in binary. */
 void chacha20_xor_file(FILE *fpInput, FILE *fpOutput,
                        unsigned char *nonce, unsigned char *key,
                        bool decrypt) {
@@ -77,7 +97,7 @@ void chacha20_xor_file(FILE *fpInput, FILE *fpOutput,
   sodium_memzero(decrypt ? ciphertext : block, BLOCK_SIZE);
 }
 
-int hashSort (const void * a, const void * b)
+int hashCompare (const void * a, const void * b)
 {
   dbEntry *A = (dbEntry *)a;
   dbEntry *B = (dbEntry *)b;

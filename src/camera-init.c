@@ -297,7 +297,7 @@ int main(int argc, char *argv[])
 
   /* Sort the "hashDb" in ascending, alphanumeric
      order according to the hash. */
-  qsort(hashDb, (size_t) cursor, sizeof(dbEntry), hashSort);
+  qsort(hashDb, (size_t) cursor, sizeof(dbEntry), hashCompare);
 
   /* Declare the streamStructs for the remaining three
      database files. This structure contains all the variables
