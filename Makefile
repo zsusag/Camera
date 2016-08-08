@@ -1,6 +1,8 @@
 # Title: Makefile
 # Purpose: To compile the code necessary for Camera
 # Author: Zachary J. Susag | Grinnell College
+# Date Created: June 23, 2016
+# Date Revised: August  8, 2016
 ###########################################################################
 #  Copyright (C) 2016 Zachary John Susag
 #  This file is part of Camera.
@@ -22,9 +24,9 @@
 
 CC=/usr/bin/gcc
 CPPFLAGS=-I 
-CFLAGS=-O -Wall -pedantic -W --std=gnu99 -g
+CFLAGS=-O -w --std=gnu99 
 LDFLAGS=-lm -lsodium 
-
+# -g -Wall -W
 all : camera-init camera-decrypt camera-update
 
 %.o : ./src/%.c

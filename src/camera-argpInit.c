@@ -2,7 +2,7 @@
  * Title: camera-argpInit.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: July 11, 2016
- * Date Revised: August  5, 2016
+ * Date Revised: August  8, 2016
  * Purpose: Uses Argp from the GNU C library to parse command line options for
  *          camera-init.
  *******************************************************************************
@@ -44,8 +44,8 @@ static char argsDocInit[] = "OUTPUT_DIR [FILES/DIRs...]";
 static struct argp_option optionsInit[] = {
   {"database",'D', "DIR", 0,
    "Output unencrypted copies of the database files to DIR", 1},
-  {0,0,0,0, "Options related to initial files to be encrypted:"},
-  {"file",     'f', "FILE", 0, "FILE should contain a list of files to be encrypted, one per line"},
+  {0,0,0,0, "Options related to initial files to be encrypted:", 0},
+  {"file",     'f', "FILE", 0, "FILE should contain a list of files to be encrypted, one per line", 0},
   {"verbose", 'v', 0, 0, "Produce verbose output", -1 },
   {"quiet",   'q', 0, 0, "Do not produce any output", -1},
   {"silent",  's', 0, OPTION_ALIAS, "", -1},
@@ -87,5 +87,5 @@ parseOptInit (int key, char* arg, struct argp_state *state) {
 }
 
 /* The argp parser for camera-init. */
-struct argp argpInit = { optionsInit, parseOptInit, argsDocInit, docInit };
+struct argp argpInit = { optionsInit, parseOptInit, argsDocInit, docInit, 0, 0, 0};
       
