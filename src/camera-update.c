@@ -86,25 +86,156 @@ streamStruct nonceStream, metadataStream, dirStream = {0};
    within the backup */
 int finalMetadataCount;
 int finalDirCount;
+
 /* A comparison function used to
 sort and find objects within the binary tree
 which holds the metadata information for
 the encrypted files */
-int metadataTreeCmpFunc (const void * a, const void * b);
+int metadataTreeCmpFunc (const void * a, const void * b) {
+  treeNode *A = (treeNode *)a;
+  treeNode *B = (treeNode *)b;
+  
+  if ( A->metadata == NULL || B->metadata == NULL ) {
+    return strncmp(A->hash, B->hash, HASH_AS_HEX_SIZE);
+  }
+  char *pathA;
+  char *pathB;
+
+  if ( (pathA = strrchr(A->metadata, '\t')) == NULL)
+    pathA = A->metadata;
+  else
+    pathA++;
+  if ( (pathB = strrchr(B->metadata, '\t')) == NULL)
+    pathB = B->metadata;
+  else
+    pathB++;
+
+  size_t pathALen = strlen(pathA);
+  size_t pathBLen = strlen(pathB);
+  
+  char compStrA[HASH_AS_HEX_SIZE + pathALen + 1];
+  char compStrB[HASH_AS_HEX_SIZE + pathBLen + 1];
+
+  sodium_memzero(compStrA, HASH_AS_HEX_SIZE + pathALen + 1);
+  sodium_memzero(compStrB, HASH_AS_HEX_SIZE + pathBLen + 1);
+
+  strncpy(compStrA, A->hash, HASH_AS_HEX_SIZE);
+  strncpy(compStrB, B->hash, HASH_AS_HEX_SIZE);
+  strncat(compStrA, pathA, pathALen);
+  strncat(compStrB, pathB, pathBLen);
+  if ( pathALen > pathBLen ) {
+    return strncmp(compStrA, compStrB, HASH_AS_HEX_SIZE + pathALen );
+  }
+  else {
+    return strncmp(compStrA, compStrB, HASH_AS_HEX_SIZE + pathBLen );
+  }
+}
+
 /* A walking function which goes through,
 in order, each element of the metadata tree
 and prints out the elements to the appropriate
 files */
-void walkHashTree(const void *data,VISIT x,int level);
+void walkHashTree(const void *data,VISIT x,int level) {
+  if (x == postorder || x == leaf) {
+    treeNode *node= *(treeNode **)data;
+    fprintf(metadataStream.stream, "%s\t%s\n", node->hash, node->metadata);
+    if (node->nonce[0] != '\0') {
+      fprintf(nonceStream.stream, "%s\t\t%s\n", node->hash, node->nonce);
+    }
+    finalMetadataCount++;
+    sodium_memzero(node, sizeof(node));
+    free(data);
+  }
+}
 /* A helper function which will maintain the contents
    of the binary trees. */
-void databaseUpdater(FILE *fpInput, treeNode *treeData, void *treeHashMetadata,
-                     char *backupDir, void *treeDir, bool del, bool verbose);
+void databaseUpdater(FILE *fpInput, treeNode *treeData, void *treeHashMetadata, char *backupDir, void *treeDir, bool del, bool verbose) {
+  char *buffer = NULL;
+  while (readline(&buffer, fpInput) != -1) {
+    if ((!del) && buffer[strlen(buffer) - 1] == '/') {
+      cryptoFree(buffer, sizeof(buffer));
+      continue;
+    }
+    if (buffer[strlen(buffer) - 1] == '/' && del) {
+      char checkDir[strlen(buffer) + 2]; // One for \t and one for \0
+      checkDir[0] = '\t';
+      strncat(checkDir, buffer, strlen(buffer));
+      char *resultDir;
+      if( (resultDir = tfind(checkDir, &treeDir, dirTreeCmpFunc)) == NULL ) {
+        cryptoFree(buffer, sizeof(buffer));
+        continue;
+      }
+      char *resultDirConverted = *(char **)resultDir;
+      if (verbose) {
+        printf("Removing %s from database\n", buffer);
+      }
+      tdelete(resultDirConverted, &treeDir, dirTreeCmpFunc);
+      cryptoFree(resultDir, sizeof(resultDir));
+      cryptoFree(buffer, sizeof(buffer));
+      continue;
+    }
+    ENTRY hashToFind;
+    hashToFind.key = buffer;
+    ENTRY *retrievedHash;
+    if( (retrievedHash = hsearch(hashToFind, (ACTION) FIND)) == NULL) {
+      fprintf(stderr, "Could not retrieve hash for %s.\nExiting ...\n", buffer);
+      cryptoFree(buffer, sizeof(buffer));
+      exit(EXIT_FAILURE);
+    }
+    treeNode fileNode;
+    sodium_memzero(fileNode.hash, HASH_AS_HEX_SIZE + 1);
+    strncpy(fileNode.hash, retrievedHash->data, HASH_AS_HEX_SIZE);
+    fileNode.metadata = buffer;
+    
+    treeNode **resultHash;
+    if( (resultHash = tfind(&fileNode, &treeHashMetadata, metadataTreeCmpFunc)) == NULL ) {
+      fprintf(stderr, "Could not update database appropriately.\nExiting...\n");
+      cryptoFree(buffer, sizeof(buffer));
+      exit(EXIT_FAILURE);
+    }
+    treeNode *retrievedNodeHash = *resultHash;
+    int fileIndex = retrievedNodeHash->index;
+    
+    if ( treeData[fileIndex - 1].hash == retrievedNodeHash->hash ||
+         treeData[fileIndex + 1].hash == retrievedNodeHash->hash) {
+      free(retrievedNodeHash->metadata);
+      if (verbose) {
+        printf("Removing %s from database\n", retrievedNodeHash->hash);
+      }
+      tdelete(retrievedNodeHash, &treeHashMetadata, metadataTreeCmpFunc);
+    }
+    else {
+      char encryptedFileName[DIRECTORY_PATH_LENGTH + strlen(backupDir) + strlen("/camera/") + 1];
+      createEncryptedFileName(backupDir, encryptedFileName, retrievedNodeHash->hash);
+      // Delete encrypted file
+      if (verbose) {
+        printf("Removing %s from backup \n", encryptedFileName);
+      }
+      unlink(encryptedFileName);
+      // Delete entry from binary tree.
+      if (verbose) {
+        printf("Removing %s from database\n", encryptedFileName);
+      }
+      tdelete(retrievedNodeHash, &treeHashMetadata, metadataTreeCmpFunc);
+    }
+    cryptoFree(buffer, sizeof(buffer));
+  }
+  cryptoFree(buffer, sizeof(buffer));
+}
+
 /* A walking function which goes through,
 in order, each element of the directories
 tree and prints out the elements and metadata
 to the directories-map database file */
-void walkDirTree(const void *data, VISIT x, int level);
+void walkDirTree(const void *data, VISIT x, int level) {
+  if (x == postorder || x == leaf) {
+    char *dir = *(char **)data;
+    fprintf(dirStream.stream, "%s\n", dir);
+    finalDirCount++;
+  }
+}
+
+
 
 int main(int argc, char *argv[])
 {
@@ -691,146 +822,4 @@ int main(int argc, char *argv[])
     fclose(fpDelFile);
   }
   return EXIT_SUCCESS;
-}
-
-
-int metadataTreeCmpFunc (const void * a, const void * b) {
-  treeNode *A = (treeNode *)a;
-  treeNode *B = (treeNode *)b;
-  
-  if ( A->metadata == NULL || B->metadata == NULL ) {
-    int answer;
-    if ( (answer = strncmp(A->hash, B->hash, HASH_AS_HEX_SIZE)) == 0) {
-      return answer;
-    }
-    else {
-      return answer;
-    }
-  }
-  char *pathA;
-  char *pathB;
-
-  if ( (pathA = strrchr(A->metadata, '\t')) == NULL)
-    pathA = A->metadata;
-  else
-    pathA++;
-  if ( (pathB = strrchr(B->metadata, '\t')) == NULL)
-    pathB = B->metadata;
-  else
-    pathB++;
-
-  size_t pathALen = strlen(pathA);
-  size_t pathBLen = strlen(pathB);
-  
-  char compStrA[HASH_AS_HEX_SIZE + pathALen + 1];
-  char compStrB[HASH_AS_HEX_SIZE + pathBLen + 1];
-
-  sodium_memzero(compStrA, HASH_AS_HEX_SIZE + pathALen + 1);
-  sodium_memzero(compStrB, HASH_AS_HEX_SIZE + pathBLen + 1);
-
-  strncpy(compStrA, A->hash, HASH_AS_HEX_SIZE);
-  strncpy(compStrB, B->hash, HASH_AS_HEX_SIZE);
-  strncat(compStrA, pathA, pathALen);
-  strncat(compStrB, pathB, pathBLen);
-  if ( pathALen > pathBLen ) {
-    return strncmp(compStrA, compStrB, HASH_AS_HEX_SIZE + pathALen );
-  }
-  else {
-    return strncmp(compStrA, compStrB, HASH_AS_HEX_SIZE + pathBLen );
-  }
-}
-
-void walkHashTree(const void *data,VISIT x,int level) {
-  if (x == postorder || x == leaf) {
-    treeNode *node= *(treeNode **)data;
-    fprintf(metadataStream.stream, "%s\t%s\n", node->hash, node->metadata);
-    if (node->nonce[0] != '\0') {
-      fprintf(nonceStream.stream, "%s\t\t%s\n", node->hash, node->nonce);
-    }
-    finalMetadataCount++;
-    sodium_memzero(node, sizeof(node));
-    free(data);
-  }
-}
-
-void walkDirTree(const void *data, VISIT x, int level) {
-  if (x == postorder || x == leaf) {
-    char *dir = *(char **)data;
-    fprintf(dirStream.stream, "%s\n", dir);
-    finalDirCount++;
-  }
-}
-
-void databaseUpdater(FILE *fpInput, treeNode *treeData, void *treeHashMetadata, char *backupDir, void *treeDir, bool del, bool verbose) {
-  char *buffer = NULL;
-  while (readline(&buffer, fpInput) != -1) {
-    if ((!del) && buffer[strlen(buffer) - 1] == '/') {
-      cryptoFree(buffer, sizeof(buffer));
-      continue;
-    }
-    if (buffer[strlen(buffer) - 1] == '/' && del) {
-      char checkDir[strlen(buffer) + 2]; // One for \t and one for \0
-      checkDir[0] = '\t';
-      strncat(checkDir, buffer, strlen(buffer));
-      char *resultDir;
-      if( (resultDir = tfind(checkDir, &treeDir, dirTreeCmpFunc)) == NULL ) {
-        cryptoFree(buffer, sizeof(buffer));
-        continue;
-      }
-      char *resultDirConverted = *(char **)resultDir;
-      if (verbose) {
-        printf("Removing %s from database\n", buffer);
-      }
-      tdelete(resultDirConverted, &treeDir, dirTreeCmpFunc);
-      cryptoFree(resultDir, sizeof(resultDir));
-      cryptoFree(buffer, sizeof(buffer));
-      continue;
-    }
-    ENTRY hashToFind;
-    hashToFind.key = buffer;
-    ENTRY *retrievedHash;
-    if( (retrievedHash = hsearch(hashToFind, (ACTION) FIND)) == NULL) {
-      fprintf(stderr, "Could not retrieve hash for %s.\nExiting ...\n", buffer);
-      cryptoFree(buffer, sizeof(buffer));
-      exit(EXIT_FAILURE);
-    }
-    treeNode fileNode;
-    sodium_memzero(fileNode.hash, HASH_AS_HEX_SIZE + 1);
-    strncpy(fileNode.hash, retrievedHash->data, HASH_AS_HEX_SIZE);
-    fileNode.metadata = buffer;
-    
-    treeNode **resultHash;
-    if( (resultHash = tfind(&fileNode, &treeHashMetadata, metadataTreeCmpFunc)) == NULL ) {
-      fprintf(stderr, "Could not update database appropriately.\nExiting...\n");
-      cryptoFree(buffer, sizeof(buffer));
-      exit(EXIT_FAILURE);
-    }
-    treeNode *retrievedNodeHash = *resultHash;
-    int fileIndex = retrievedNodeHash->index;
-    
-    if ( treeData[fileIndex - 1].hash == retrievedNodeHash->hash ||
-         treeData[fileIndex + 1].hash == retrievedNodeHash->hash) {
-      free(retrievedNodeHash->metadata);
-      if (verbose) {
-        printf("Removing %s from database\n", retrievedNodeHash->hash);
-      }
-      tdelete(retrievedNodeHash, &treeHashMetadata, metadataTreeCmpFunc);
-    }
-    else {
-      char encryptedFileName[DIRECTORY_PATH_LENGTH + strlen(backupDir) + strlen("/camera/") + 1];
-      createEncryptedFileName(backupDir, encryptedFileName, retrievedNodeHash->hash);
-      // Delete encrypted file
-      if (verbose) {
-        printf("Removing %s from backup \n", encryptedFileName);
-      }
-      unlink(encryptedFileName);
-      // Delete entry from binary tree.
-      if (verbose) {
-        printf("Removing %s from database\n", encryptedFileName);
-      }
-      tdelete(retrievedNodeHash, &treeHashMetadata, metadataTreeCmpFunc);
-    }
-    cryptoFree(buffer, sizeof(buffer));
-  }
-  cryptoFree(buffer, sizeof(buffer));
 }
