@@ -2,7 +2,7 @@
  * Title: camera-decrypt.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: June 30, 2016
- * Date Revised: August  8, 2016
+ * Date Revised: August 10, 2016
  * Purpose: This program allows the user to decrypt either certain files or
  *          the entire backup directory produced by Camera. The decrypted files
  *          will have exactly the same structure, permissions, owners,
@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
   /* Parse all of the command line arguments and options */
   argp_parse(&argpDecrypt, argc, argv, 0, 0, &arguments); 
 
-  /* Initalize the Sodium library */
+  /* Initialize the Sodium library */
   if (sodium_init() == -1) { 
     return EXIT_FAILURE; 
   } 
@@ -117,9 +117,9 @@ int main(int argc, char *argv[])
   FILE *fpDatabaseCount = NULL;
   
   /* Create the pathnames for the four database files. */
-  char dbHashNoncePath[cameraDirLen + strlen(HASH_NONCE_DB_NAME)];
-  char dbHashMetadataPath[cameraDirLen + strlen(HASH_METADATA_DB_NAME)];
-  char dbDirPath[cameraDirLen + strlen(DIRECTORIES_DB_NAME)];
+  char dbHashNoncePath[cameraDirLen + strlen(HASH_NONCE_DB_NAME) + 1];
+  char dbHashMetadataPath[cameraDirLen + strlen(HASH_METADATA_DB_NAME) + 1];
+  char dbDirPath[cameraDirLen + strlen(DIRECTORIES_DB_NAME) + 1];
   char databaseCountPath[cameraDirLen + strlen(DATABASE_ENTRY_COUNT_NAME) + 1];
 
   /* Using the Sodium library, zero out all four strings to prevent
