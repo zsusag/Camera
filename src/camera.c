@@ -2,10 +2,10 @@
  * Title: camera.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: June 30, 2016
- * Date Revised: August  8, 2016
+ * Date Revised: July 22, 2017
  * Purpose: Provide general functions for the Camera suite of programs.
  *******************************************************************************
- * Copyright (C) 2016 Zachary John Susag
+ * Copyright (C) 2016,2017 Zachary John Susag
  * This file is part of Camera.
  * 
  * Camera is free software; you can redistribute it and/or
@@ -43,12 +43,15 @@
 /* Purpose: Take the secret key, keyString, and convert each character
    into unsigned characters and then hash the key into outLen bytes, storing the
    result in keyHash.
-   
+
    Preconditions: 
    * keyHash must have at least HASH_BYTES of memory allocated.
    * Refer to the libsodium documentation for specific conditions
-     for the crypto_generichash function. */
+     for the crypto_generichash function.
+
+   TODO: Switch to password hashing function. */
 void keyToHash(char *keyString, unsigned char *keyHash, size_t outLen) {
+  
   size_t keyLen = strlen(keyString);
   unsigned char keyArray[keyLen];
   for ( unsigned int i = 0; i < keyLen; i++) {
@@ -120,7 +123,9 @@ int hashCompare (const void * a, const void * b)
 
    Preconditions:
    * path should point to a directory.
-   * filesTBE is opened for writing. */
+   * filesTBE is opened for writing.
+
+   TODO: Rename fileFinder to a better name that's more informative */
 void fileFinder(char *path, FILE *filesTBE) {
   DIR *dir;
   struct dirent *entry;
@@ -237,7 +242,9 @@ void createOutputDirectory(char *cameraDirPath, char *outputDir, bool verbose, b
    Preconditions:
    * filesTBE has a list of pathnames, one per line, of files to be encrypted as is readable.
    * treeDir is a pointer used for purpose of a binary tree. */
-unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database, unsigned char *key, unsigned int cursor, bool init, void **treeDir, bool verbose, bool silent, int fileCount) {
+unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database,
+                            unsigned char *key, unsigned int cursor, bool init,
+                            void **treeDir, bool verbose, bool silent, int fileCount) {
   FILE * fpInput = NULL;
   FILE * fpOutput = NULL;
   
@@ -406,16 +413,11 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database, 
   return cursor;
 }
 
-/* Purpose: Turn off echoing to the current terminal, prompting the user
-   to enter the secret key as a string. Once entered, restore the terminal
-   generate the key in hashed form and store it in key, along with the nonce
-   used to encrypt the database files and store that hash in nonce.
-
-   Preconditions: 
-   * key has memory allocated of crypto_stream_chacha20_KEYBYTES bytes.
-   * nonce has memory allocated of NONCE_BYTES*/
-ssize_t getpassSafe (unsigned char *key, unsigned char *nonce) {
-  char *keyAsString = NULL;
+/*
+  Purpose: Turn off echoing to the current terminal, prompting the user
+  to enter the secret key as a string. Once entered, restore the terminal.
+*/
+ssize_t getpassSafe(char *key) {
   struct termios old, new;
   int nread;
   /* Turn echoing off and fail if we can’t. */
@@ -428,14 +430,10 @@ ssize_t getpassSafe (unsigned char *key, unsigned char *nonce) {
 
   /* Read the password. */
   printf("Please enter the secret key: ");
-  nread = readline (&keyAsString, stdin);
+  nread = readline (&key, stdin);
   putchar('\n');
   /* Restore terminal. */
   (void) tcsetattr (fileno (stdin), TCSAFLUSH, &old);
-  keyToHash(keyAsString, key, crypto_stream_chacha20_KEYBYTES);
-  keyToHash(keyAsString, nonce, crypto_stream_chacha20_NONCEBYTES);
-  sodium_memzero(keyAsString, sizeof(keyAsString));
-  free(keyAsString);
   return nread;
 }
 
@@ -835,7 +833,8 @@ char *convertedNodeCheck = *(char **)currentNodeCheck;
    * databaseCountPath has memory allocated of at least (strlen(cameraDir) +
      DATABASE_ENTRY_COUNT_NAME + 1) bytes. */
 void constructDatabasePaths(char *cameraDir, size_t cameraDirLen, char *dbHashNoncePath,
-                            char *dbHashMetadataPath, char *dbDirPath, char *databaseCountPath) {
+                            char *dbHashMetadataPath, char *dbDirPath, char *databaseCountPath,
+                            char *masterKeyPath, bool unencrypted) {
 
   strncpy(dbHashNoncePath, cameraDir, cameraDirLen);
   strncat(dbHashNoncePath, HASH_NONCE_DB_NAME, strlen(HASH_NONCE_DB_NAME));
@@ -845,6 +844,10 @@ void constructDatabasePaths(char *cameraDir, size_t cameraDirLen, char *dbHashNo
   strncat(dbDirPath, DIRECTORIES_DB_NAME, strlen(DIRECTORIES_DB_NAME));
   strncpy(databaseCountPath, cameraDir, cameraDirLen);
   strncat(databaseCountPath, DATABASE_ENTRY_COUNT_NAME, strlen(DATABASE_ENTRY_COUNT_NAME));
+  if (!unencrypted) {
+    strncpy(masterKeyPath, cameraDir, cameraDirLen);
+    strncat(masterKeyPath, MASTERKEY_NAME, strlen(MASTERKEY_NAME));
+  }
 }
 
 /* Purpose: Open a file pointed to by filePath with mode, mode, storing the result
@@ -925,5 +928,24 @@ void collectFilesTBE(char *pathname, FILE *outputFile) {
     char *fullFilepath = realpath(pathname, NULL);
     fprintf(outputFile, "%s\n", fullFilepath);
     cryptoFree(fullFilepath, sizeof(fullFilepath));
+  }
+}
+
+/* Purpose: Derive a subkey from the master key. If the derivation
+   failed, then print an error message and exit the program immediately.
+
+   Preconditions:
+   * masterKey needs to have the master key within it.
+   * subkey must have storage equal to subkeyLen bytes.
+   * salt cannot be null.
+*/
+void deriveSubkey(unsigned char *subkey[], unsigned long long subkeyLen,
+                  char *masterKey, unsigned char *salt) {
+  if (crypto_pwhash(*subkey, subkeyLen, masterKey, MASTER_KEY_LENGTH,
+                    salt, crypto_pwhash_OPSLIMIT_SENSITIVE,
+                    crypto_pwhash_MEMLIMIT_SENSITIVE, crypto_pwhash_ALG_DEFAULT)
+      != 0) {
+    fprintf(stderr, "Could not generate subkey. This is most likely due to insufficient ram.\n");
+    exit(EXIT_FAILURE);
   }
 }

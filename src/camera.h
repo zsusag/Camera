@@ -2,10 +2,10 @@
  * Title: camera.h
  * Author(s): Zachary John Susag - Grinnell College
  * Date Created: June 30, 2016
- * Date Revised: August  5, 2016
+n * Date Revised: July 22, 2017
  * Purpose: Serve as the header file for Camera
  *******************************************************************************
- * Copyright (C) 2016 Zachary John Susag
+ * Copyright (C) 2016,2017 Zachary John Susag
  * This file is part of Camera.
  * 
  * Camera is free software; you can redistribute it and/or
@@ -43,6 +43,7 @@
 #define ACCESSTIME_LENGTH 10
 #define MODTIME_LENGTH 10
 #define NUM_TAB_CHARS 10
+#define MASTER_KEY_LENGTH 4096
 
 #include <stdlib.h>
 #include <sys/types.h>
@@ -55,6 +56,7 @@ static const char HASH_NONCE_DB_NAME[] = "hashes-nonces";
 static const char HASH_METADATA_DB_NAME[] = "hashes-metadata";
 static const char DIRECTORIES_DB_NAME[] = "directories-map";
 static const char DATABASE_ENTRY_COUNT_NAME[] = "database-count";
+static const char MASTERKEY_NAME[] = "master_key.key";
 
 extern struct argp argpInit;
 /* Used by camera-init to communicate with parseOptInit. */
@@ -221,7 +223,7 @@ will be created by hashing the key and the result
 will be stored within nonce.
 */
 
-ssize_t getpassSafe (unsigned char *key, unsigned char *nonce);
+ssize_t getpassSafe (char *key);
 
 /*
   This function is a comparison function for use with
@@ -368,7 +370,8 @@ void addDirToTree(char *dirPath, char *dirCheck, void ** treeDir);
 */
 
 void constructDatabasePaths(char *hashesDir, size_t hashesDirLen, char *dbHashNoncePath,
-                            char *dbHashMetadataPath, char *dbDirPath, char *databaseCountPath);
+                            char *dbHashMetadataPath, char *dbDirPath, char *databaseCountPath,
+                            char *masterKeyPath, bool unencrypted);
 
 /*
   This function will attempt to open filePath
@@ -423,4 +426,9 @@ void cryptoFree(void *data, size_t size);
 */
 void collectFilesTBE(char *pathname, FILE *outputFile);
 
+/* This function will derive
+   a subkey based upon the master key.
+ */
+void deriveSubkey(unsigned char *subkey[], unsigned long long subkeyLen,
+                  char *masterKey, unsigned char *salt);
 #endif

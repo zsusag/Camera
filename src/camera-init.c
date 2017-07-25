@@ -2,7 +2,7 @@
  * Title: camera-init.c
  * Author(s): Zachary John Susag - Grinnell College
  * Date Created: June 23, 2016
- * Date Revised: August  5, 2016
+ * Date Revised: July 22, 2017
  * Purpose: The overarching purpose of this program is to initialize a "camera"
  *          directory which will serve as the encrypted, backup directory. The
  *          user provides a set of files, or directories, using the appropriate
@@ -34,7 +34,7 @@
  *         For an incremental update to an already created directory, use
  *         camera-update.
  *******************************************************************************
- * Copyright (C) 2016 Zachary John Susag
+ * Copyright (C) 2016,2017 Zachary John Susag
  * This file is part of Camera.
  * 
  * Camera is free software; you can redistribute it and/or
@@ -106,18 +106,67 @@ int main(int argc, char *argv[])
      and exit immediately if it cannot
      be initialized. */
   if (sodium_init() == -1) {
-    fprintf(stderr, "Sodium library could not be initialized\n");
+    fprintf(stderr, "Sodium library could not be initialized.\n");
     return EXIT_FAILURE;
   }
+
   /* Prompt the user to enter, interactively,
      the secret key used for encryption and decryption
      and store the hashed version within "key". During this,
      the nonce used to encrypt the database files will be created
      from the key. */
-  unsigned char key[crypto_stream_chacha20_KEYBYTES];
-  unsigned char dbNonce[crypto_stream_chacha20_NONCEBYTES];
-  getpassSafe(key, dbNonce);
+  char *key = NULL;
+  getpassSafe(key);
   
+  /* Generate a new master key which will be used to generate
+     the encryption and hashing subkeys. This key will later be
+     written to a file and encrypted using the user provided
+     key. */
+  char masterKey[MASTER_KEY_LENGTH];
+  randombytes_buf(masterKey, MASTER_KEY_LENGTH);
+
+  /* Declare and allocate the nonces used to encrypt
+     the database files. */
+  unsigned char hashNonceNonce[crypto_stream_chacha20_NONCEBYTES];
+  unsigned char hashMetadataNonce[crypto_stream_chacha20_NONCEBYTES];
+  unsigned char databaseCountNonce[crypto_stream_chacha20_NONCEBYTES];
+  unsigned char databaseDirNonce[crypto_stream_chacha20_NONCEBYTES];
+
+  /* Generate the nonces randomly for the
+     database files. */
+  randombytes_buf(hashNonceNonce, crypto_stream_chacha20_NONCEBYTES);
+  randombytes_buf(hashMetadataNonce, crypto_stream_chacha20_NONCEBYTES);
+  randombytes_buf(databaseCountNonce, crypto_stream_chacha20_NONCEBYTES);
+  randombytes_buf(databaseDirNonce, crypto_stream_chacha20_NONCEBYTES);
+
+  /* Declare and allocate storage for the salts for the
+     master key and the two subkeys: one for encryption, 
+     one for hashing. */
+  unsigned char masterKeySalt[crypto_pwhash_SALTBYTES];
+  unsigned char encryptionSalt[crypto_pwhash_SALTBYTES];
+  unsigned char hashSalt[crypto_pwhash_SALTBYTES];
+
+  /* Randomly generate the salts for the master key
+     and the two subkeys. */
+  randombytes_buf(masterKeySalt, crypto_pwhash_SALTBYTES);
+  randombytes_buf(encryptionSalt, crypto_pwhash_SALTBYTES);
+  randombytes_buf(hashSalt, crypto_pwhash_SALTBYTES);
+
+  /* Declare and allocate storage for the hashing key and
+     the two encryption keys: one for the files being
+     backed up and one for master key. */
+  unsigned char masterEncryptionKey[crypto_stream_xchacha20_KEYBYTES];
+  unsigned char encryptionKey[crypto_stream_xchacha20_KEYBYTES];
+  unsigned char hashKey[crypto_generichash_KEYBYTES];
+
+  /* Derive the subkeys for encryption and hashing. */
+  deriveSubkey(&masterEncryptionKey, crypto_stream_xchacha20_KEYBYTES,
+               masterKey, masterKeySalt);
+  deriveSubkey(&encryptionKey, crypto_stream_xchacha20_KEYBYTES,
+               masterKey, encryptionSalt);
+  deriveSubkey(&hashKey, crypto_generichash_KEYBYTES,
+               masterKey, hashSalt);
+
   /* Remove any extra '/' or relative paths from
      the given "outputDir" and databaseDir. */
   arguments.outputDir = realpath(arguments.outputDir, NULL);
@@ -146,6 +195,12 @@ int main(int argc, char *argv[])
   FILE *fpDatabaseHashMetadata = NULL;
   FILE *fpDatabaseCount = NULL;
   FILE *fpDatabaseDir = NULL;
+
+  /* Declare the file that will be used to store the master
+     key alongside the nonces for the database files and
+     the salts for the key derivations. */
+  FILE *fpMasterKey = NULL;
+
   /* Declare and allocate storage for the pathnames
      of each of the four database files */
   char dbHashNoncePath[cameraDirLen + strlen(HASH_NONCE_DB_NAME) + 1];
@@ -153,16 +208,22 @@ int main(int argc, char *argv[])
   char dbDirPath[cameraDirLen + strlen(DIRECTORIES_DB_NAME) + 1];
   char databaseCountPath[cameraDirLen + strlen(DATABASE_ENTRY_COUNT_NAME) + 1];
 
+  /* Declare and allocate storage for the pathname
+     for the masterkey file. */
+  char masterKeyPath[cameraDirLen + strlen(MASTERKEY_NAME) + 1];
+
   /* Initally clear the memory of each pathname
      to prevent garbage data being present in the pathnames */
   sodium_memzero(dbHashNoncePath, sizeof(dbHashNoncePath));
   sodium_memzero(dbHashMetadataPath, sizeof(dbHashMetadataPath));
   sodium_memzero(dbDirPath, sizeof(dbDirPath));
   sodium_memzero(databaseCountPath, sizeof(databaseCountPath));
+  sodium_memzero(masterKeyPath, sizeof(masterKeyPath));
 
   /* Create the pathnames for the four database files. */
   constructDatabasePaths(cameraDir, cameraDirLen, dbHashNoncePath,
-                         dbHashMetadataPath, dbDirPath, databaseCountPath);
+                         dbHashMetadataPath, dbDirPath, databaseCountPath,
+                         masterKeyPath, false);
 
   /* 
      Open the database files for all four of the databases for writing.
@@ -175,6 +236,11 @@ int main(int argc, char *argv[])
   openFile(&fpDatabaseDir, dbDirPath, "wb");
   openFile(&fpDatabaseCount, databaseCountPath, "wb");
 
+  /* Open the file for the master key. If it cannot be opened,
+     print an error message to stderr and exit immediately
+     from the program. */
+  openFile(&fpMasterKey, masterKeyPath, "wb");
+
   /* Declare the files that will store
      the unencrypted databases and initialize them to NULL. */
   FILE *fpuDatabaseHashNonce = NULL;
@@ -185,7 +251,6 @@ int main(int argc, char *argv[])
   /* If the user requested unencrypted copies
      of the database files, then construct the names of these files. */
   if (arguments.databaseDir != NULL) {
-
     size_t databaseDirLen = strlen(arguments.databaseDir);
     char uHashNoncePath[databaseDirLen +
                         strlen(HASH_NONCE_DB_NAME) + 1];
@@ -203,13 +268,14 @@ int main(int argc, char *argv[])
 
     constructDatabasePaths(arguments.databaseDir, databaseDirLen,
                            uHashNoncePath, uHashMetadataPath, uDirPath,
-                           uDatabaseCountPath);
+                           uDatabaseCountPath, NULL, true);
     
     openFile(&fpuDatabaseHashNonce, uHashNoncePath, "w");
     openFile(&fpuDatabaseHashMetadata, uHashMetadataPath, "w");
     openFile(&fpuDatabaseDir, uDirPath, "w");
     openFile(&fpuDatabaseCount, uDatabaseCountPath, "w");
   }
+
   /* Create a temporary file to contain
      a list of pathnames to be encrypted, one per line,
      from all of the sources available in camera-init. */
@@ -220,6 +286,7 @@ int main(int argc, char *argv[])
   int fd = mkstemp(filesTBEPathname);
   FILE *filesTBE = fdopen(fd, "w+");
   int fileCount = 0;
+
   /* If the user provided pathnames
      to files on the command line, then add
      these to "filesTBE". */
@@ -232,6 +299,7 @@ int main(int argc, char *argv[])
       collectFilesTBE(arguments.files[i], filesTBE);
     }
   }
+
   /* If the user provided a file which
      contains a list of pathnames of files
      they wish to have encrypted then copy these
@@ -258,6 +326,7 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Error in creating hash table. This is most likely due to insufficient memory.\nExiting ...\n");
     return EXIT_FAILURE;
   }
+
   /* Initalize the root of the binary tree
      which will store all of the metadata information
      about the directories containing the files
@@ -269,6 +338,7 @@ int main(int argc, char *argv[])
   sprintf(uniqCommand, "sort -u -o %s %s", filesTBEPathname, filesTBEPathname);
   system(uniqCommand);
   free(uniqCommand);
+
   /* Count how many lines are in
      filesTBE as this might have changed
      after duplicate entries are found and
@@ -285,6 +355,7 @@ int main(int argc, char *argv[])
   /* Storage location for all the metadata
      information about each file being encrypted */
   dbEntry hashDb[fileCount];
+
   /* Encrypt each file and write its entry
      into the "camera/" directory. First the function
      will hash the file which will be used as 
@@ -304,11 +375,15 @@ int main(int argc, char *argv[])
      needed to create and maintain a string stream. */
   streamStruct metadataStream, nonceStream, countStream = {0};
 
+  /* Declare the streamStruct for the master key file. */
+  streamStruct masterKeyStream = {0};
+
   /* Open the streams */
   metadataStream.stream = open_memstream(&metadataStream.string, &metadataStream.size);
   nonceStream.stream = open_memstream(&nonceStream.string, &nonceStream.size);
   dirStream.stream = open_memstream(&dirStream.string, &dirStream.size);
   countStream.stream = open_memstream(&countStream.string, &countStream.size);
+  masterKeyStream.stream = open_memstream(&masterKeyStream.string, &countStream.size);
 
   /* Format the files for initial wrtiting. */
   fprintf(metadataStream.stream, "HASH%28s\tINODE\t\tDEVICE\tMODE\tUID\tGUID\tACC.TIME\tMODTIME\t\tPATHNAME\n", " ");
@@ -363,14 +438,16 @@ int main(int argc, char *argv[])
   if (arguments.verbose) {
     printf("Writing database files to %s/camera\n", arguments.outputDir);
   }
-  chacha20_xor_file(metadataStream.stream, fpDatabaseHashMetadata, dbNonce,
+
+  chacha20_xor_file(metadataStream.stream, fpDatabaseHashMetadata, hashMetadataNonce,
                     key, false);
-  chacha20_xor_file(nonceStream.stream, fpDatabaseHashNonce, dbNonce,
+  chacha20_xor_file(nonceStream.stream, fpDatabaseHashNonce, hashNonceNonce,
                     key, false);
-  chacha20_xor_file(countStream.stream, fpDatabaseCount, dbNonce,
+  chacha20_xor_file(countStream.stream, fpDatabaseCount, databaseCountNonce,
                     key, false);
-  chacha20_xor_file(dirStream.stream, fpDatabaseDir, dbNonce,
+  chacha20_xor_file(dirStream.stream, fpDatabaseDir, databaseDirNonce,
                     key, false);
+
   /* If the user requested that unencrypted copies of
      the database files were to be made, then rewind the streams again,
      copy the contents of the stream into the unencrypted database
@@ -390,6 +467,42 @@ int main(int argc, char *argv[])
     fclose(fpuDatabaseCount);
     fclose(fpuDatabaseDir);
   }
+
+  /* Generate the nonce needed to encrypt the master key file. */
+  unsigned char masterKeyNonce[crypto_stream_xchacha20_NONCEBYTES];
+  randombytes_buf(masterKeyNonce, crypto_stream_xchacha20_NONCEBYTES);
+
+  /* Print to the file the nonce and salt needed to decrypt
+     the master key file.*/
+  fwrite(masterKeySalt, 1, crypto_pwhash_SALTBYTES,
+         fpMasterKey);
+  fwrite(masterKeyNonce, 1, crypto_stream_xchacha20_NONCEBYTES,
+         fpMasterKey);
+
+  /* Populate the masterKeyStream with all the needed information
+     that will be encrypted: master key, nonces for the database
+     files, and salts for the subkeys. */
+  fprintf(masterKeyStream.stream, masterKey);
+  fwrite(encryptionSalt, 1, crypto_pwhash_SALTBYTES,
+         masterKeyStream.stream);
+  fwrite(hashSalt, 1, crypto_pwhash_SALTBYTES,
+         masterKeyStream.stream);
+  fwrite(hashNonceNonce, 1, crypto_stream_chacha20_NONCEBYTES,
+         masterKeyStream.stream);
+  fwrite(hashMetadataNonce, 1, crypto_stream_chacha20_NONCEBYTES,
+         masterKeyStream.stream);
+  fwrite(databaseCountNonce, 1, crypto_stream_chacha20_NONCEBYTES,
+         masterKeyStream.stream);
+  fwrite(databaseDirNonce, 1, crypto_stream_chacha20_NONCEBYTES,
+         masterKeyStream.stream);
+  
+  /* Write out and encrypt the master key file which contains
+     the master key and all the nonces for the database
+     files. */
+  chacha20_xor_file(masterKeyStream.stream, fpMasterKey, masterKeyNonce,
+                    masterEncryptionKey, false);
+
+  /* TODO: Need to cryptofree stuff as well as close all of the streams and files. */
   tdestroy(dirTree, free);
   /* Close the streams as they are no longer needed. */
   cleanupStreams(&metadataStream, &nonceStream, &dirStream, &countStream);
