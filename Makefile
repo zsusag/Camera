@@ -25,8 +25,7 @@
 CC=/usr/bin/gcc
 CPPFLAGS=-I 
 CFLAGS=-O -w --std=gnu99 
-LDFLAGS=-lm -lsodium 
-# -g -Wall -W
+LDFLAGS=-lm -lsodium -g -Wall -W
 all : camera-init camera-decrypt camera-update
 
 %.o : ./src/%.c
