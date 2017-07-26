@@ -2,7 +2,7 @@
  * Title: camera-init.c
  * Author(s): Zachary John Susag - Grinnell College
  * Date Created: June 23, 2016
- * Date Revised: July 22, 2017
+ * Date Revised: July 26, 2017
  * Purpose: The overarching purpose of this program is to initialize a "camera"
  *          directory which will serve as the encrypted, backup directory. The
  *          user provides a set of files, or directories, using the appropriate
@@ -116,8 +116,8 @@ int main(int argc, char *argv[])
      the nonce used to encrypt the database files will be created
      from the key. */
   char *key = NULL;
-  getpassSafe(key);
-  
+  getpassSafe(&key);
+  printf("%s\n", key);
   /* Generate a new master key which will be used to generate
      the encryption and hashing subkeys. This key will later be
      written to a file and encrypted using the user provided
@@ -160,13 +160,15 @@ int main(int argc, char *argv[])
   unsigned char hashKey[crypto_generichash_KEYBYTES];
 
   /* Derive the subkeys for encryption and hashing. */
-  deriveSubkey(&masterEncryptionKey, crypto_stream_xchacha20_KEYBYTES,
-               masterKey, masterKeySalt);
-  deriveSubkey(&encryptionKey, crypto_stream_xchacha20_KEYBYTES,
+  deriveSubkey(masterEncryptionKey, crypto_stream_xchacha20_KEYBYTES,
+               key, masterKeySalt);
+  deriveSubkey(encryptionKey, crypto_stream_xchacha20_KEYBYTES,
                masterKey, encryptionSalt);
-  deriveSubkey(&hashKey, crypto_generichash_KEYBYTES,
+  deriveSubkey(hashKey, crypto_generichash_KEYBYTES,
                masterKey, hashSalt);
 
+  /* Clear and free the memory storing the plaintext key. */
+  cryptoFree(key, sizeof(key));
   /* Remove any extra '/' or relative paths from
      the given "outputDir" and databaseDir. */
   arguments.outputDir = realpath(arguments.outputDir, NULL);
@@ -361,8 +363,8 @@ int main(int argc, char *argv[])
      will hash the file which will be used as 
      the name of the encrypted file. Then the file will be
      encrypted  and stored within the camera directory. */
-  unsigned int cursor = hashAndEncrypt(arguments.outputDir, filesTBE, hashDb, key, 0, true,
-                                       &dirTree, arguments.verbose, arguments.silent, fileCount);
+  unsigned int cursor = hashAndEncrypt(arguments.outputDir, filesTBE, hashDb, encryptionKey,                                        hashKey, 0, true, &dirTree, arguments.verbose,
+                                       arguments.silent, fileCount);
   /* Remove the hash table from the program. */
   hdestroy();
 
@@ -383,7 +385,7 @@ int main(int argc, char *argv[])
   nonceStream.stream = open_memstream(&nonceStream.string, &nonceStream.size);
   dirStream.stream = open_memstream(&dirStream.string, &dirStream.size);
   countStream.stream = open_memstream(&countStream.string, &countStream.size);
-  masterKeyStream.stream = open_memstream(&masterKeyStream.string, &countStream.size);
+  masterKeyStream.stream = open_memstream(&masterKeyStream.string, &masterKeyStream.size);
 
   /* Format the files for initial wrtiting. */
   fprintf(metadataStream.stream, "HASH%28s\tINODE\t\tDEVICE\tMODE\tUID\tGUID\tACC.TIME\tMODTIME\t\tPATHNAME\n", " ");
@@ -440,13 +442,13 @@ int main(int argc, char *argv[])
   }
 
   chacha20_xor_file(metadataStream.stream, fpDatabaseHashMetadata, hashMetadataNonce,
-                    key, false);
+                    encryptionKey, false);
   chacha20_xor_file(nonceStream.stream, fpDatabaseHashNonce, hashNonceNonce,
-                    key, false);
+                    encryptionKey, false);
   chacha20_xor_file(countStream.stream, fpDatabaseCount, databaseCountNonce,
-                    key, false);
+                    encryptionKey, false);
   chacha20_xor_file(dirStream.stream, fpDatabaseDir, databaseDirNonce,
-                    key, false);
+                    encryptionKey, false);
 
   /* If the user requested that unencrypted copies of
      the database files were to be made, then rewind the streams again,
@@ -502,10 +504,26 @@ int main(int argc, char *argv[])
   chacha20_xor_file(masterKeyStream.stream, fpMasterKey, masterKeyNonce,
                     masterEncryptionKey, false);
 
+  /* Zero out the memory of sensitive data before
+     exiting the program. */
+  sodium_memzero(masterKeyNonce, sizeof(masterKeyNonce));
+  sodium_memzero(masterKey, sizeof(masterKey));
+  sodium_memzero(hashNonceNonce, sizeof(hashNonceNonce));
+  sodium_memzero(hashMetadataNonce, sizeof(hashMetadataNonce));
+  sodium_memzero(databaseCountNonce, sizeof(databaseCountNonce));
+  sodium_memzero(databaseDirNonce, sizeof(databaseDirNonce));
+  sodium_memzero(masterKeySalt, sizeof(masterKeySalt));
+  sodium_memzero(encryptionSalt, sizeof(encryptionSalt));
+  sodium_memzero(hashSalt, sizeof(hashSalt));
+  sodium_memzero(masterEncryptionKey, sizeof(masterEncryptionKey));
+  sodium_memzero(encryptionKey, sizeof(encryptionKey));
+  sodium_memzero(hashKey, sizeof(hashKey));
+  
   /* TODO: Need to cryptofree stuff as well as close all of the streams and files. */
   tdestroy(dirTree, free);
   /* Close the streams as they are no longer needed. */
-  cleanupStreams(&metadataStream, &nonceStream, &dirStream, &countStream);
+  cleanupStreams(&metadataStream, &nonceStream, &dirStream, &countStream,
+                 &masterKeyStream);
   /* Free any remaining allocated data 
      and close any remaining open files. */
   free(arguments.outputDir);
@@ -515,5 +533,6 @@ int main(int argc, char *argv[])
   fclose(fpDatabaseHashMetadata);
   fclose(fpDatabaseDir);
   fclose(fpDatabaseCount);
+  fclose(fpMasterKey);
   return EXIT_SUCCESS;
 }

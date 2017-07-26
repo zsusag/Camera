@@ -2,7 +2,7 @@
  * Title: camera.c
  * Author(s): Zachary J. Susag - Grinnell College
  * Date Created: June 30, 2016
- * Date Revised: July 22, 2017
+ * Date Revised: July 26, 2017
  * Purpose: Provide general functions for the Camera suite of programs.
  *******************************************************************************
  * Copyright (C) 2016,2017 Zachary John Susag
@@ -243,8 +243,9 @@ void createOutputDirectory(char *cameraDirPath, char *outputDir, bool verbose, b
    * filesTBE has a list of pathnames, one per line, of files to be encrypted as is readable.
    * treeDir is a pointer used for purpose of a binary tree. */
 unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database,
-                            unsigned char *key, unsigned int cursor, bool init,
-                            void **treeDir, bool verbose, bool silent, int fileCount) {
+                            unsigned char *encryptionKey, unsigned char *hashKey,
+                            unsigned int cursor, bool init, void **treeDir,
+                            bool verbose, bool silent, int fileCount) {
   FILE * fpInput = NULL;
   FILE * fpOutput = NULL;
   
@@ -285,7 +286,8 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database,
     unsigned char binNonce[NONCE_BYTES];
     
     crypto_generichash_state state;
-    crypto_generichash_init(&state, key, sizeof(key), sizeof(binHash));
+    crypto_generichash_init(&state, hashKey, crypto_generichash_KEYBYTES,
+                            sizeof(binHash));
 
     // Populate the nonce with random bytes.
     randombytes_buf(binNonce, sizeof(binNonce));
@@ -392,7 +394,7 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database,
       for the next block. Also set the blockLength to zero for the same
       purpose and increment the blockCounter by (BLOCK_SIZE / 64).
     */
-    chacha20_xor_file(fpInput, fpOutput, binNonce, key, false);
+    chacha20_xor_file(fpInput, fpOutput, binNonce, encryptionKey, false);
     
     /* 
        Close the input and output files before moving onto 
@@ -417,7 +419,7 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database,
   Purpose: Turn off echoing to the current terminal, prompting the user
   to enter the secret key as a string. Once entered, restore the terminal.
 */
-ssize_t getpassSafe(char *key) {
+ssize_t getpassSafe(char **key) {
   struct termios old, new;
   int nread;
   /* Turn echoing off and fail if we can’t. */
@@ -430,7 +432,7 @@ ssize_t getpassSafe(char *key) {
 
   /* Read the password. */
   printf("Please enter the secret key: ");
-  nread = readline (&key, stdin);
+  nread = readline (key, stdin);
   putchar('\n');
   /* Restore terminal. */
   (void) tcsetattr (fileno (stdin), TCSAFLUSH, &old);
@@ -890,17 +892,20 @@ void rewindStreams(FILE **metadataStream, FILE **nonceStream,
 /* Purpose: Close each of the streams and securely free the memory of each stream.
 
    Preconditions:
-   * Each of the four streams must be opened in some form. */
+   * Each of the five streams must be opened in some form. */
 void cleanupStreams(streamStruct *metadataStream, streamStruct *nonceStream,
-                    streamStruct *dirStream, streamStruct *countStream) {
+                    streamStruct *dirStream, streamStruct *countStream,
+                    streamStruct *masterKeyStream) {
   fclose(metadataStream->stream);
   fclose(nonceStream->stream);
   fclose(countStream->stream);
   fclose(dirStream->stream);
+  fclose(masterKeyStream->stream);
   cryptoFree(metadataStream->string, metadataStream->size);
   cryptoFree(nonceStream->string, nonceStream->size);
   cryptoFree(dirStream->string, dirStream->size);
   cryptoFree(countStream->string, countStream->size);
+  cryptoFree(masterKeyStream->string, masterKeyStream->size);
 }
 
 /* Purpose: Zero size bytes of data and then free data, resetting its value
@@ -939,9 +944,9 @@ void collectFilesTBE(char *pathname, FILE *outputFile) {
    * subkey must have storage equal to subkeyLen bytes.
    * salt cannot be null.
 */
-void deriveSubkey(unsigned char *subkey[], unsigned long long subkeyLen,
+void deriveSubkey(unsigned char *subkey, unsigned long long subkeyLen,
                   char *masterKey, unsigned char *salt) {
-  if (crypto_pwhash(*subkey, subkeyLen, masterKey, MASTER_KEY_LENGTH,
+  if (crypto_pwhash(subkey, subkeyLen, masterKey, MASTER_KEY_LENGTH,
                     salt, crypto_pwhash_OPSLIMIT_SENSITIVE,
                     crypto_pwhash_MEMLIMIT_SENSITIVE, crypto_pwhash_ALG_DEFAULT)
       != 0) {
@@ -949,3 +954,20 @@ void deriveSubkey(unsigned char *subkey[], unsigned long long subkeyLen,
     exit(EXIT_FAILURE);
   }
 }
+/*
+  masterKeyNonce
+  key
+  masterKey
+  hashNonceNonce
+  hashMetadataNonce
+  databaseCountNonce
+  databaseDirNonce
+  masterKeySalt
+  encryptionSalt
+  hashSalt
+  masterEncryptionKey
+  encryptionKey
+  hashKey
+
+  fpMasterKey
+*/

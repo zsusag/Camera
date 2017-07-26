@@ -208,8 +208,9 @@ int hashCompare (const void * a, const void * b);
 */
 
 unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database,
-                            unsigned char *key, unsigned int cursor, bool init,
-                            void **treeDir, bool verbose, bool silent, int fileCount);
+                            unsigned char *encryptionKey, unsigned char *hashKey,
+                            unsigned int cursor, bool init, void **treeDir,
+                            bool verbose, bool silent, int fileCount);
 
 /*
   This function will first
@@ -223,7 +224,7 @@ will be created by hashing the key and the result
 will be stored within nonce.
 */
 
-ssize_t getpassSafe (char *key);
+ssize_t getpassSafe (char **key);
 
 /*
   This function is a comparison function for use with
@@ -403,7 +404,8 @@ void rewindStreams(FILE **metadataStream, FILE **nonceStream,
   for those strings.
 */
 void cleanupStreams(streamStruct *metadataStream, streamStruct *nonceStream,
-                    streamStruct *dirStream, streamStruct *countStream);
+                    streamStruct *dirStream, streamStruct *countStream,
+                    streamStruct *masterKeyStream);
 /*
   This function will zero out
   the "size" bytes, free data, and then
@@ -429,6 +431,6 @@ void collectFilesTBE(char *pathname, FILE *outputFile);
 /* This function will derive
    a subkey based upon the master key.
  */
-void deriveSubkey(unsigned char *subkey[], unsigned long long subkeyLen,
+void deriveSubkey(unsigned char *subkey, unsigned long long subkeyLen,
                   char *masterKey, unsigned char *salt);
 #endif
