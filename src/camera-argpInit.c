@@ -34,14 +34,14 @@ const char *argp_program_version = "Camera 1.0";
 const char *argp_program_bug_address = "<susagzac@grinnell.edu>";
 
 /* Program Documentation. */
-static char docInit[] =
+static char doc_init[] =
   "Initialize an encrypted backup directory using the ChaCha20 stream cipher";
 
 /* Description of arguments that are accepted for camera-init. */
-static char argsDocInit[] = "OUTPUT_DIR [FILES/DIRs...]";
+static char args_doc_init[] = "OUTPUT_DIR [FILES/DIRs...]";
 
 /* Options for camera-init. */
-static struct argp_option optionsInit[] = {
+static struct argp_option options_init[] = {
   {"database",'D', "DIR", 0,
    "Output unencrypted copies of the database files to DIR", 1},
   {0,0,0,0, "Options related to initial files to be encrypted:", 0},
@@ -56,7 +56,7 @@ static struct argp_option optionsInit[] = {
 /* Parse a single option for camera-init. */
 static error_t
 parseOptInit (int key, char* arg, struct argp_state *state) {
-  argumentsInit *arguments = state->input;
+  arguments_init_t *arguments = state->input;
 
   switch (key)
     {
@@ -67,16 +67,16 @@ parseOptInit (int key, char* arg, struct argp_state *state) {
       arguments->silent = true;
       break;
     case 'D':
-      arguments->databaseDir = arg;
+      arguments->database_dir = arg;
       break;
     case 'f':
-      arguments->inputFile = arg;
+      arguments->input_file = arg;
       break;
     case ARGP_KEY_NO_ARGS:
       argp_usage(state);
       break;
     case ARGP_KEY_ARG:
-      arguments->outputDir = arg;
+      arguments->output_dir = arg;
       arguments->files = &state->argv[state->next];
       state->next = state->argc;
       break;
@@ -87,5 +87,5 @@ parseOptInit (int key, char* arg, struct argp_state *state) {
 }
 
 /* The argp parser for camera-init. */
-struct argp argpInit = { optionsInit, parseOptInit, argsDocInit, docInit, 0, 0, 0};
+struct argp argp_init_t = { options_init, parseOptInit, args_doc_init, doc_init, 0, 0, 0};
       

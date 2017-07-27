@@ -74,465 +74,465 @@
    is that due to the implementation of binary trees in the
    GNU C library the "walking" function has to have a specific signature
    which disallows just passing in the variables as needed. */
-unsigned int dirCount;
-streamStruct dirStream;
+unsigned int dir_count;
+stream_struct_t dir_stream;
 
 /* This function is a helper function
    that walks the binary tree storing the
    directory metadata information and writes
    it to "fpDatabaseDir" */
 void walkDirTree(const void *data, VISIT x, int level) {
-  if (x == postorder || x == leaf) {
-    char *str = *(char **)data;
-    fprintf(dirStream.stream, "%s\n", str);
-    dirCount++;
-  }
+     if (x == postorder || x == leaf) {
+          char *str = *(char **)data;
+          fprintf(dir_stream.stream, "%s\n", str);
+          dir_count++;
+     }
 }
 
 int main(int argc, char *argv[])
 {
-  argumentsInit arguments;
-  /* Default values for command line arguments */
-  arguments.files = NULL;
-  arguments.outputDir = NULL;
-  arguments.silent = false;
-  arguments.verbose = false;
-  arguments.inputFile = NULL;
-  arguments.databaseDir = NULL;
-  /* Parse the command line options and arguments */
-  argp_parse(&argpInit, argc, argv, 0, 0, &arguments);
+     arguments_init_t arguments;
+     /* Default values for command line arguments */
+     arguments.files = NULL;
+     arguments.output_dir = NULL;
+     arguments.silent = false;
+     arguments.verbose = false;
+     arguments.input_file = NULL;
+     arguments.database_dir = NULL;
+     /* Parse the command line options and arguments */
+     argp_parse(&argp_init_t, argc, argv, 0, 0, &arguments);
 
-  /* Initialize the Sodium library
-     and exit immediately if it cannot
-     be initialized. */
-  if (sodium_init() == -1) {
-    fprintf(stderr, "Sodium library could not be initialized.\n");
-    return EXIT_FAILURE;
-  }
+     /* Initialize the Sodium library
+        and exit immediately if it cannot
+        be initialized. */
+     if (sodium_init() == -1) {
+          fprintf(stderr, "Sodium library could not be initialized.\n");
+          return EXIT_FAILURE;
+     }
 
-  /* Prompt the user to enter, interactively,
-     the secret key used for encryption and decryption
-     and store the hashed version within "key". During this,
-     the nonce used to encrypt the database files will be created
-     from the key. */
-  char *key = NULL;
-  getpassSafe(&key);
-  printf("%s\n", key);
-  /* Generate a new master key which will be used to generate
-     the encryption and hashing subkeys. This key will later be
-     written to a file and encrypted using the user provided
-     key. */
-  char masterKey[MASTER_KEY_LENGTH];
-  randombytes_buf(masterKey, MASTER_KEY_LENGTH);
+     /* Prompt the user to enter, interactively,
+        the secret key used for encryption and decryption
+        and store the hashed version within "key". During this,
+        the nonce used to encrypt the database files will be created
+        from the key. */
+     char *key = NULL;
+     get_pass_safe(&key);
+     printf("%s\n", key);
+     /* Generate a new master key which will be used to generate
+        the encryption and hashing subkeys. This key will later be
+        written to a file and encrypted using the user provided
+        key. */
+     char master_key[MASTER_KEY_LENGTH];
+     randombytes_buf(master_key, MASTER_KEY_LENGTH);
 
-  /* Declare and allocate the nonces used to encrypt
-     the database files. */
-  unsigned char hashNonceNonce[crypto_stream_chacha20_NONCEBYTES];
-  unsigned char hashMetadataNonce[crypto_stream_chacha20_NONCEBYTES];
-  unsigned char databaseCountNonce[crypto_stream_chacha20_NONCEBYTES];
-  unsigned char databaseDirNonce[crypto_stream_chacha20_NONCEBYTES];
+     /* Declare and allocate the nonces used to encrypt
+        the database files. */
+     unsigned char hash_nonce_nonce[crypto_stream_chacha20_NONCEBYTES];
+     unsigned char hash_metadata_nonce[crypto_stream_chacha20_NONCEBYTES];
+     unsigned char database_count_nonce[crypto_stream_chacha20_NONCEBYTES];
+     unsigned char database_dir_nonce[crypto_stream_chacha20_NONCEBYTES];
 
-  /* Generate the nonces randomly for the
-     database files. */
-  randombytes_buf(hashNonceNonce, crypto_stream_chacha20_NONCEBYTES);
-  randombytes_buf(hashMetadataNonce, crypto_stream_chacha20_NONCEBYTES);
-  randombytes_buf(databaseCountNonce, crypto_stream_chacha20_NONCEBYTES);
-  randombytes_buf(databaseDirNonce, crypto_stream_chacha20_NONCEBYTES);
+     /* Generate the nonces randomly for the
+        database files. */
+     randombytes_buf(hash_nonce_nonce, crypto_stream_chacha20_NONCEBYTES);
+     randombytes_buf(hash_metadata_nonce, crypto_stream_chacha20_NONCEBYTES);
+     randombytes_buf(database_count_nonce, crypto_stream_chacha20_NONCEBYTES);
+     randombytes_buf(database_dir_nonce, crypto_stream_chacha20_NONCEBYTES);
 
-  /* Declare and allocate storage for the salts for the
-     master key and the two subkeys: one for encryption, 
-     one for hashing. */
-  unsigned char masterKeySalt[crypto_pwhash_SALTBYTES];
-  unsigned char encryptionSalt[crypto_pwhash_SALTBYTES];
-  unsigned char hashSalt[crypto_pwhash_SALTBYTES];
+     /* Declare and allocate storage for the salts for the
+        master key and the two subkeys: one for encryption, 
+        one for hashing. */
+     unsigned char master_key_salt[crypto_pwhash_SALTBYTES];
+     unsigned char encryption_salt[crypto_pwhash_SALTBYTES];
+     unsigned char hash_salt[crypto_pwhash_SALTBYTES];
 
-  /* Randomly generate the salts for the master key
-     and the two subkeys. */
-  randombytes_buf(masterKeySalt, crypto_pwhash_SALTBYTES);
-  randombytes_buf(encryptionSalt, crypto_pwhash_SALTBYTES);
-  randombytes_buf(hashSalt, crypto_pwhash_SALTBYTES);
+     /* Randomly generate the salts for the master key
+        and the two subkeys. */
+     randombytes_buf(master_key_salt, crypto_pwhash_SALTBYTES);
+     randombytes_buf(encryption_salt, crypto_pwhash_SALTBYTES);
+     randombytes_buf(hash_salt, crypto_pwhash_SALTBYTES);
 
-  /* Declare and allocate storage for the hashing key and
-     the two encryption keys: one for the files being
-     backed up and one for master key. */
-  unsigned char masterEncryptionKey[crypto_stream_xchacha20_KEYBYTES];
-  unsigned char encryptionKey[crypto_stream_xchacha20_KEYBYTES];
-  unsigned char hashKey[crypto_generichash_KEYBYTES];
+     /* Declare and allocate storage for the hashing key and
+        the two encryption keys: one for the files being
+        backed up and one for master key. */
+     unsigned char master_encryption_key[crypto_stream_xchacha20_KEYBYTES];
+     unsigned char encryption_key[crypto_stream_xchacha20_KEYBYTES];
+     unsigned char hash_key[crypto_generichash_KEYBYTES];
 
-  /* Derive the subkeys for encryption and hashing. */
-  deriveSubkey(masterEncryptionKey, crypto_stream_xchacha20_KEYBYTES,
-               key, masterKeySalt);
-  deriveSubkey(encryptionKey, crypto_stream_xchacha20_KEYBYTES,
-               masterKey, encryptionSalt);
-  deriveSubkey(hashKey, crypto_generichash_KEYBYTES,
-               masterKey, hashSalt);
+     /* Derive the subkeys for encryption and hashing. */
+     derive_subkey(master_encryption_key, crypto_stream_xchacha20_KEYBYTES,
+                   key, master_key_salt);
+     derive_subkey(encryption_key, crypto_stream_xchacha20_KEYBYTES,
+                   master_key, encryption_salt);
+     derive_subkey(hash_key, crypto_generichash_KEYBYTES,
+                   master_key, hash_salt);
 
-  /* Clear and free the memory storing the plaintext key. */
-  cryptoFree(key, sizeof(key));
-  /* Remove any extra '/' or relative paths from
-     the given "outputDir" and databaseDir. */
-  arguments.outputDir = realpath(arguments.outputDir, NULL);
+     /* Clear and free the memory storing the plaintext key. */
+     crypto_free(key, sizeof(key));
+     /* Remove any extra '/' or relative paths from
+        the given "output_dir" and database_dir. */
+     arguments.output_dir = realpath(arguments.output_dir, NULL);
   
-  /* If arguments.databaseDir is not equal to NULL,
-     then the user wants unencrypted copies
-     of the database files stored at a directory of their choosing.
-     After removing any relative paths and extra '/' check to make
-     sure that the directory exists. */
-  if (arguments.databaseDir != NULL) {
-    struct stat stDirTest = {0};
-    if (stat(arguments.databaseDir, &stDirTest) == -1) {
-      fprintf(stderr, "No directory under %s found.\n", arguments.databaseDir);
-      return EXIT_FAILURE;
-    }
-  }
-  /* Create the output directory pathname */
-  size_t cameraDirLen = strlen(arguments.outputDir) + strlen("/camera/");
-  char cameraDir[cameraDirLen + 1];
-  sodium_memzero(cameraDir, cameraDirLen + 1);
-  createOutputDirectory(cameraDir, arguments.outputDir, arguments.verbose, true);
+     /* If arguments.database_dir is not equal to NULL,
+        then the user wants unencrypted copies
+        of the database files stored at a directory of their choosing.
+        After removing any relative paths and extra '/' check to make
+        sure that the directory exists. */
+     if (arguments.database_dir != NULL) {
+          struct stat st_dir_test = {0};
+          if (stat(arguments.database_dir, &st_dir_test) == -1) {
+               fprintf(stderr, "No directory under %s found.\n", arguments.database_dir);
+               return EXIT_FAILURE;
+          }
+     }
+     /* Create the output directory pathname */
+     size_t camera_dir_len = strlen(arguments.output_dir) + strlen("/camera/");
+     char camera_dir[camera_dir_len + 1];
+     sodium_memzero(camera_dir, camera_dir_len + 1);
+     create_output_directory(camera_dir, arguments.output_dir, arguments.verbose, true);
   
-  /* Declare each file that will be either created or read
-     from for the encryption process. */
-  FILE *fpDatabaseHashNonce = NULL;
-  FILE *fpDatabaseHashMetadata = NULL;
-  FILE *fpDatabaseCount = NULL;
-  FILE *fpDatabaseDir = NULL;
+     /* Declare each file that will be either created or read
+        from for the encryption process. */
+     FILE *fp_db_hash_nonce = NULL;
+     FILE *fp_db_hash_metadata = NULL;
+     FILE *fp_db_count = NULL;
+     FILE *fp_db_dir = NULL;
 
-  /* Declare the file that will be used to store the master
-     key alongside the nonces for the database files and
-     the salts for the key derivations. */
-  FILE *fpMasterKey = NULL;
+     /* Declare the file that will be used to store the master
+        key alongside the nonces for the database files and
+        the salts for the key derivations. */
+     FILE *fp_master_key = NULL;
 
-  /* Declare and allocate storage for the pathnames
-     of each of the four database files */
-  char dbHashNoncePath[cameraDirLen + strlen(HASH_NONCE_DB_NAME) + 1];
-  char dbHashMetadataPath[cameraDirLen + strlen(HASH_METADATA_DB_NAME) + 1];
-  char dbDirPath[cameraDirLen + strlen(DIRECTORIES_DB_NAME) + 1];
-  char databaseCountPath[cameraDirLen + strlen(DATABASE_ENTRY_COUNT_NAME) + 1];
+     /* Declare and allocate storage for the pathnames
+        of each of the four database files */
+     char db_hash_nonce_path[camera_dir_len + strlen(HASH_NONCE_DB_NAME) + 1];
+     char db_hash_metadata_path[camera_dir_len + strlen(HASH_METADATA_DB_NAME) + 1];
+     char db_dir_path[camera_dir_len + strlen(DIRECTORIES_DB_NAME) + 1];
+     char database_count_path[camera_dir_len + strlen(DATABASE_ENTRY_COUNT_NAME) + 1];
 
-  /* Declare and allocate storage for the pathname
-     for the masterkey file. */
-  char masterKeyPath[cameraDirLen + strlen(MASTERKEY_NAME) + 1];
+     /* Declare and allocate storage for the pathname
+        for the masterkey file. */
+     char master_key_path[camera_dir_len + strlen(MASTERKEY_NAME) + 1];
 
-  /* Initally clear the memory of each pathname
-     to prevent garbage data being present in the pathnames */
-  sodium_memzero(dbHashNoncePath, sizeof(dbHashNoncePath));
-  sodium_memzero(dbHashMetadataPath, sizeof(dbHashMetadataPath));
-  sodium_memzero(dbDirPath, sizeof(dbDirPath));
-  sodium_memzero(databaseCountPath, sizeof(databaseCountPath));
-  sodium_memzero(masterKeyPath, sizeof(masterKeyPath));
+     /* Initally clear the memory of each pathname
+        to prevent garbage data being present in the pathnames */
+     sodium_memzero(db_hash_nonce_path, sizeof(db_hash_nonce_path));
+     sodium_memzero(db_hash_metadata_path, sizeof(db_hash_metadata_path));
+     sodium_memzero(db_dir_path, sizeof(db_dir_path));
+     sodium_memzero(database_count_path, sizeof(database_count_path));
+     sodium_memzero(master_key_path, sizeof(master_key_path));
 
-  /* Create the pathnames for the four database files. */
-  constructDatabasePaths(cameraDir, cameraDirLen, dbHashNoncePath,
-                         dbHashMetadataPath, dbDirPath, databaseCountPath,
-                         masterKeyPath, false);
+     /* Create the pathnames for the four database files. */
+     construct_database_paths(camera_dir, camera_dir_len, db_hash_nonce_path,
+                              db_hash_metadata_path, db_dir_path, database_count_path,
+                              master_key_path, false);
 
-  /* 
-     Open the database files for all four of the databases for writing.
-     If they cannot be opened, 
-     for whatever reason, display a
-     message to STDERR and exit immediately from the program.
-  */
-  openFile(&fpDatabaseHashNonce, dbHashNoncePath, "wb");
-  openFile(&fpDatabaseHashMetadata, dbHashMetadataPath, "wb");
-  openFile(&fpDatabaseDir, dbDirPath, "wb");
-  openFile(&fpDatabaseCount, databaseCountPath, "wb");
+     /* 
+        Open the database files for all four of the databases for writing.
+        If they cannot be opened, 
+        for whatever reason, display a
+        message to STDERR and exit immediately from the program.
+     */
+     open_file(&fp_db_hash_nonce, db_hash_nonce_path, "wb");
+     open_file(&fp_db_hash_metadata, db_hash_metadata_path, "wb");
+     open_file(&fp_db_dir, db_dir_path, "wb");
+     open_file(&fp_db_count, database_count_path, "wb");
 
-  /* Open the file for the master key. If it cannot be opened,
-     print an error message to stderr and exit immediately
-     from the program. */
-  openFile(&fpMasterKey, masterKeyPath, "wb");
+     /* Open the file for the master key. If it cannot be opened,
+        print an error message to stderr and exit immediately
+        from the program. */
+     open_file(&fp_master_key, master_key_path, "wb");
 
-  /* Declare the files that will store
-     the unencrypted databases and initialize them to NULL. */
-  FILE *fpuDatabaseHashNonce = NULL;
-  FILE *fpuDatabaseHashMetadata = NULL;
-  FILE *fpuDatabaseCount = NULL;
-  FILE *fpuDatabaseDir = NULL;
+     /* Declare the files that will store
+        the unencrypted databases and initialize them to NULL. */
+     FILE *fpu_db_hash_nonce = NULL;
+     FILE *fpu_db_hash_metadata = NULL;
+     FILE *fpu_db_count = NULL;
+     FILE *fpu_db_dir = NULL;
 
-  /* If the user requested unencrypted copies
-     of the database files, then construct the names of these files. */
-  if (arguments.databaseDir != NULL) {
-    size_t databaseDirLen = strlen(arguments.databaseDir);
-    char uHashNoncePath[databaseDirLen +
-                        strlen(HASH_NONCE_DB_NAME) + 1];
-    char uHashMetadataPath[databaseDirLen +
-                           strlen(HASH_METADATA_DB_NAME) + 1];
-    char uDirPath[databaseDirLen +
-                  strlen(DIRECTORIES_DB_NAME) + 1];
-    char uDatabaseCountPath[databaseDirLen +
-                            strlen(DATABASE_ENTRY_COUNT_NAME) + 1];
+     /* If the user requested unencrypted copies
+        of the database files, then construct the names of these files. */
+     if (arguments.database_dir != NULL) {
+          size_t database_dir_len = strlen(arguments.database_dir);
+          char u_hash_nonce_path[database_dir_len +
+                                 strlen(HASH_NONCE_DB_NAME) + 1];
+          char u_hash_metadata_path[database_dir_len +
+                                    strlen(HASH_METADATA_DB_NAME) + 1];
+          char u_dir_path[database_dir_len +
+                          strlen(DIRECTORIES_DB_NAME) + 1];
+          char u_database_count_path[database_dir_len +
+                                     strlen(DATABASE_ENTRY_COUNT_NAME) + 1];
     
-    sodium_memzero(uHashNoncePath, sizeof(uHashNoncePath));
-    sodium_memzero(uHashMetadataPath, sizeof(uHashMetadataPath));
-    sodium_memzero(uDirPath, sizeof(uDirPath));
-    sodium_memzero(uDatabaseCountPath, sizeof(uDatabaseCountPath));
+          sodium_memzero(u_hash_nonce_path, sizeof(u_hash_nonce_path));
+          sodium_memzero(u_hash_metadata_path, sizeof(u_hash_metadata_path));
+          sodium_memzero(u_dir_path, sizeof(u_dir_path));
+          sodium_memzero(u_database_count_path, sizeof(u_database_count_path));
 
-    constructDatabasePaths(arguments.databaseDir, databaseDirLen,
-                           uHashNoncePath, uHashMetadataPath, uDirPath,
-                           uDatabaseCountPath, NULL, true);
+          construct_database_paths(arguments.database_dir, database_dir_len,
+                                   u_hash_nonce_path, u_hash_metadata_path, u_dir_path,
+                                   u_database_count_path, NULL, true);
     
-    openFile(&fpuDatabaseHashNonce, uHashNoncePath, "w");
-    openFile(&fpuDatabaseHashMetadata, uHashMetadataPath, "w");
-    openFile(&fpuDatabaseDir, uDirPath, "w");
-    openFile(&fpuDatabaseCount, uDatabaseCountPath, "w");
-  }
+          open_file(&fpu_db_hash_nonce, u_hash_nonce_path, "w");
+          open_file(&fpu_db_hash_metadata, u_hash_metadata_path, "w");
+          open_file(&fpu_db_dir, u_dir_path, "w");
+          open_file(&fpu_db_count, u_database_count_path, "w");
+     }
 
-  /* Create a temporary file to contain
-     a list of pathnames to be encrypted, one per line,
-     from all of the sources available in camera-init. */
-  size_t filesTBEPathLen = strlen("/tmp/cameraXXXXXX") + 1;
-  char filesTBEPathname[filesTBEPathLen];
-  sodium_memzero(filesTBEPathname, filesTBEPathLen);
-  strncpy(filesTBEPathname, "/tmp/cameraXXXXXX", filesTBEPathLen);
-  int fd = mkstemp(filesTBEPathname);
-  FILE *filesTBE = fdopen(fd, "w+");
-  int fileCount = 0;
+     /* Create a temporary file to contain
+        a list of pathnames to be encrypted, one per line,
+        from all of the sources available in camera-init. */
+     size_t files_tbe_path_len = strlen("/tmp/cameraXXXXXX") + 1;
+     char files_tbe_pathname[files_tbe_path_len];
+     sodium_memzero(files_tbe_pathname, files_tbe_path_len);
+     strncpy(files_tbe_pathname, "/tmp/cameraXXXXXX", files_tbe_path_len);
+     int fd = mkstemp(files_tbe_pathname);
+     FILE *files_tbe = fdopen(fd, "w+");
+     int file_count = 0;
 
-  /* If the user provided pathnames
-     to files on the command line, then add
-     these to "filesTBE". */
-  if (arguments.files != NULL) {
-    for (int i = 0; arguments.files[i]; i++) {
-      /* If the user wants to encrypt an entire directory,
-         then call the function "fileFinder" to recursively
-         add the pathnames of the files within "inputDir" and
-         its subdirectories to "filesTBE" */
-      collectFilesTBE(arguments.files[i], filesTBE);
-    }
-  }
+     /* If the user provided pathnames
+        to files on the command line, then add
+        these to "files_tbe". */
+     if (arguments.files != NULL) {
+          for (int i = 0; arguments.files[i]; i++) {
+               /* If the user wants to encrypt an entire directory,
+                  then call the function "find_files" to recursively
+                  add the pathnames of the files within "inputDir" and
+                  its subdirectories to "files_tbe" */
+               collect_files_tbe(arguments.files[i], files_tbe);
+          }
+     }
 
-  /* If the user provided a file which
-     contains a list of pathnames of files
-     they wish to have encrypted then copy these
-     pathnames into "filesTBE" */
-  if (arguments.inputFile != NULL) {
-    FILE *fpInput = NULL;
-    if ( (fpInput = fopen(arguments.inputFile, "r")) == NULL) {
-      fprintf(stderr, "%s can't be opened as a readable file.\nExiting...\n",
-              arguments.inputFile);
-      return EXIT_FAILURE;
-    }
-    char *buffer = NULL;
-    while ( readline(&buffer, fpInput) != -1) {
-      collectFilesTBE(buffer, filesTBE);
-    }
-    cryptoFree(buffer, sizeof(buffer));
-    fclose(fpInput);
-  }
-  /* Move back to the beginning of the file for reading. */
-  rewind(filesTBE);
+     /* If the user provided a file which
+        contains a list of pathnames of files
+        they wish to have encrypted then copy these
+        pathnames into "files_tbe" */
+     if (arguments.input_file != NULL) {
+          FILE *fp_input = NULL;
+          if ( (fp_input = fopen(arguments.input_file, "r")) == NULL) {
+               fprintf(stderr, "%s can't be opened as a readable file.\nExiting...\n",
+                       arguments.input_file);
+               return EXIT_FAILURE;
+          }
+          char *buffer = NULL;
+          while ( readline(&buffer, fp_input) != -1) {
+               collect_files_tbe(buffer, files_tbe);
+          }
+          crypto_free(buffer, sizeof(buffer));
+          fclose(fp_input);
+     }
+     /* Move back to the beginning of the file for reading. */
+     rewind(files_tbe);
 
-  /* Create the hash table to check for repeated hashes. */
-  if ( hcreate((size_t) fileCount * 1.3) == 0 ) {
-    fprintf(stderr, "Error in creating hash table. This is most likely due to insufficient memory.\nExiting ...\n");
-    return EXIT_FAILURE;
-  }
+     /* Create the hash table to check for repeated hashes. */
+     if ( hcreate((size_t) file_count * 1.3) == 0 ) {
+          fprintf(stderr, "Error in creating hash table. This is most likely due to insufficient memory.\nExiting ...\n");
+          return EXIT_FAILURE;
+     }
 
-  /* Initalize the root of the binary tree
-     which will store all of the metadata information
-     about the directories containing the files
-     being encrypted. */
-  void *dirTree = NULL;
+     /* Initalize the root of the binary tree
+        which will store all of the metadata information
+        about the directories containing the files
+        being encrypted. */
+     void *dir_tree = NULL;
 
-  char *uniqCommand = malloc((filesTBEPathLen * 2) + strlen("sort -u -o ") + 1);
-  sodium_memzero(uniqCommand, sizeof(uniqCommand));
-  sprintf(uniqCommand, "sort -u -o %s %s", filesTBEPathname, filesTBEPathname);
-  system(uniqCommand);
-  free(uniqCommand);
+     char *uniq_command = malloc((files_tbe_path_len * 2) + strlen("sort -u -o ") + 1);
+     sodium_memzero(uniq_command, sizeof(uniq_command));
+     sprintf(uniq_command, "sort -u -o %s %s", files_tbe_pathname, files_tbe_pathname);
+     system(uniq_command);
+     free(uniq_command);
 
-  /* Count how many lines are in
-     filesTBE as this might have changed
-     after duplicate entries are found and
-     removed. */
-  char ch;
-  while(!feof(filesTBE)) {
-    ch = fgetc(filesTBE);
-    if (ch == '\n') {
-      fileCount++;
-    }
-  }
-  rewind(filesTBE);
+     /* Count how many lines are in
+        files_tbe as this might have changed
+        after duplicate entries are found and
+        removed. */
+     char ch;
+     while(!feof(files_tbe)) {
+          ch = fgetc(files_tbe);
+          if (ch == '\n') {
+               file_count++;
+          }
+     }
+     rewind(files_tbe);
 
-  /* Storage location for all the metadata
-     information about each file being encrypted */
-  dbEntry hashDb[fileCount];
+     /* Storage location for all the metadata
+        information about each file being encrypted */
+     db_entry_t hash_db[file_count];
 
-  /* Encrypt each file and write its entry
-     into the "camera/" directory. First the function
-     will hash the file which will be used as 
-     the name of the encrypted file. Then the file will be
-     encrypted  and stored within the camera directory. */
-  unsigned int cursor = hashAndEncrypt(arguments.outputDir, filesTBE, hashDb, encryptionKey,                                        hashKey, 0, true, &dirTree, arguments.verbose,
-                                       arguments.silent, fileCount);
-  /* Remove the hash table from the program. */
-  hdestroy();
+     /* Encrypt each file and write its entry
+        into the "camera/" directory. First the function
+        will hash the file which will be used as 
+        the name of the encrypted file. Then the file will be
+        encrypted  and stored within the camera directory. */
+     unsigned int cursor = hash_and_encrypt(arguments.output_dir, files_tbe, hash_db, encryption_key,                                        hash_key, 0, true, &dir_tree, arguments.verbose,
+                                            arguments.silent, file_count);
+     /* Remove the hash table from the program. */
+     hdestroy();
 
-  /* Sort the "hashDb" in ascending, alphanumeric
-     order according to the hash. */
-  qsort(hashDb, (size_t) cursor, sizeof(dbEntry), hashCompare);
+     /* Sort the "hash_db" in ascending, alphanumeric
+        order according to the hash. */
+     qsort(hash_db, (size_t) cursor, sizeof(db_entry_t), hash_compare);
 
-  /* Declare the streamStructs for the remaining three
-     database files. This structure contains all the variables
-     needed to create and maintain a string stream. */
-  streamStruct metadataStream, nonceStream, countStream = {0};
+     /* Declare the streamStructs for the remaining three
+        database files. This structure contains all the variables
+        needed to create and maintain a string stream. */
+     stream_struct_t metadata_stream, nonce_stream, count_stream = {0};
 
-  /* Declare the streamStruct for the master key file. */
-  streamStruct masterKeyStream = {0};
+     /* Declare the stream_struct_t for the master key file. */
+     stream_struct_t master_key_stream = {0};
 
-  /* Open the streams */
-  metadataStream.stream = open_memstream(&metadataStream.string, &metadataStream.size);
-  nonceStream.stream = open_memstream(&nonceStream.string, &nonceStream.size);
-  dirStream.stream = open_memstream(&dirStream.string, &dirStream.size);
-  countStream.stream = open_memstream(&countStream.string, &countStream.size);
-  masterKeyStream.stream = open_memstream(&masterKeyStream.string, &masterKeyStream.size);
+     /* Open the streams */
+     metadata_stream.stream = open_memstream(&metadata_stream.string, &metadata_stream.size);
+     nonce_stream.stream = open_memstream(&nonce_stream.string, &nonce_stream.size);
+     dir_stream.stream = open_memstream(&dir_stream.string, &dir_stream.size);
+     count_stream.stream = open_memstream(&count_stream.string, &count_stream.size);
+     master_key_stream.stream = open_memstream(&master_key_stream.string, &master_key_stream.size);
 
-  /* Format the files for initial wrtiting. */
-  fprintf(metadataStream.stream, "HASH%28s\tINODE\t\tDEVICE\tMODE\tUID\tGUID\tACC.TIME\tMODTIME\t\tPATHNAME\n", " ");
-  fprintf(dirStream.stream, "INODE\t\tDEVICE\tMODE\tUID\tGUID\tACC.TIME\tMODTIME\t\tDIRNAME\n");
-  fprintf(nonceStream.stream, "HASH%28s\tNONCE\n", " ");
-  fprintf(countStream.stream, "ENTRY TYPE\tNUMBER OF ENTRIES\n");
+     /* Format the files for initial wrtiting. */
+     fprintf(metadata_stream.stream, "HASH%28s\tINODE\t\tDEVICE\tMODE\tUID\tGUID\tACC.TIME\tMODTIME\t\tPATHNAME\n", " ");
+     fprintf(dir_stream.stream, "INODE\t\tDEVICE\tMODE\tUID\tGUID\tACC.TIME\tMODTIME\t\tDIRNAME\n");
+     fprintf(nonce_stream.stream, "HASH%28s\tNONCE\n", " ");
+     fprintf(count_stream.stream, "ENTRY TYPE\tNUMBER OF ENTRIES\n");
   
-  /* For every entry within "hashDb", 
-     print out the contents of the array
-     to the appropriate streams. After
-     the data has been copied and formatted
-     into the different database files, zero the 
-     entries and free the allocated memory.
-  */
-  for ( unsigned int i = 0; i < cursor; i++) {
-    dbEntry *currentHashEntry = &hashDb[i];
-    if ( currentHashEntry->copy == false ) {
-      fprintf(nonceStream.stream, "%s\t%s\n",
-              currentHashEntry->hash,
-              currentHashEntry->nonce);
-    }
-    fprintf(metadataStream.stream, "%s\t%u\t%d\t%0o\t%d\t%d\t%d\t%d\t%s\n",
-            currentHashEntry->hash, (unsigned int) currentHashEntry->inode,
-            (int) currentHashEntry->device,
-            currentHashEntry->mode, currentHashEntry->uid,
-            currentHashEntry->guid, (int) currentHashEntry->accessTime,(int)
-            currentHashEntry->modTime, currentHashEntry->pathname);
-    /* Free the memory as the DB files are being written of each pathname. */
-    cryptoFree(currentHashEntry->pathname, sizeof(currentHashEntry->pathname));
-  }
-  dirCount = 0;
-  /* Walk through the binary
-     tree containing the metadata on the
-     directories in-order. During this walk-through
-     the data will be formatted and printed
-     to the dirStream. */
-  twalk(dirTree, walkDirTree);
+     /* For every entry within "hash_db", 
+        print out the contents of the array
+        to the appropriate streams. After
+        the data has been copied and formatted
+        into the different database files, zero the 
+        entries and free the allocated memory.
+     */
+     for ( unsigned int i = 0; i < cursor; i++) {
+          db_entry_t *current_hash_entry = &hash_db[i];
+          if ( current_hash_entry->copy == false ) {
+               fprintf(nonce_stream.stream, "%s\t%s\n",
+                       current_hash_entry->hash,
+                       current_hash_entry->nonce);
+          }
+          fprintf(metadata_stream.stream, "%s\t%u\t%d\t%0o\t%d\t%d\t%d\t%d\t%s\n",
+                  current_hash_entry->hash, (unsigned int) current_hash_entry->inode,
+                  (int) current_hash_entry->device,
+                  current_hash_entry->mode, current_hash_entry->uid,
+                  current_hash_entry->guid, (int) current_hash_entry->access_time,(int)
+                  current_hash_entry->mod_time, current_hash_entry->pathname);
+          /* Free the memory as the DB files are being written of each pathname. */
+          crypto_free(current_hash_entry->pathname, sizeof(current_hash_entry->pathname));
+     }
+     dir_count = 0;
+     /* Walk through the binary
+        tree containing the metadata on the
+        directories in-order. During this walk-through
+        the data will be formatted and printed
+        to the dir_stream. */
+     twalk(dir_tree, walkDirTree);
 
-  /* Print the count of how many entries are
-     within the "hashes-metadata" and
-     "directories-map" database files. */
-  fprintf(countStream.stream, "%s\t%d\n", "Hash metadata", cursor);
-  fprintf(countStream.stream, "%s\t%d\n", "Directory count", dirCount);
+     /* Print the count of how many entries are
+        within the "hashes-metadata" and
+        "directories-map" database files. */
+     fprintf(count_stream.stream, "%s\t%d\n", "Hash metadata", cursor);
+     fprintf(count_stream.stream, "%s\t%d\n", "Directory count", dir_count);
 
-  /* Rewind the streams before having the data
-     read from them */
-  rewindStreams(&metadataStream.stream, &nonceStream.stream,
-                &dirStream.stream, &countStream.stream);
+     /* Rewind the streams before having the data
+        read from them */
+     rewind_streams(&metadata_stream.stream, &nonce_stream.stream,
+                    &dir_stream.stream, &count_stream.stream);
 
-  /* Write the encrypted database files
-     out to the appropriate locations */
-  if (arguments.verbose) {
-    printf("Writing database files to %s/camera\n", arguments.outputDir);
-  }
+     /* Write the encrypted database files
+        out to the appropriate locations */
+     if (arguments.verbose) {
+          printf("Writing database files to %s/camera\n", arguments.output_dir);
+     }
 
-  chacha20_xor_file(metadataStream.stream, fpDatabaseHashMetadata, hashMetadataNonce,
-                    encryptionKey, false);
-  chacha20_xor_file(nonceStream.stream, fpDatabaseHashNonce, hashNonceNonce,
-                    encryptionKey, false);
-  chacha20_xor_file(countStream.stream, fpDatabaseCount, databaseCountNonce,
-                    encryptionKey, false);
-  chacha20_xor_file(dirStream.stream, fpDatabaseDir, databaseDirNonce,
-                    encryptionKey, false);
+     chacha20_xor_file(metadata_stream.stream, fp_db_hash_metadata, hash_metadata_nonce,
+                       encryption_key, false);
+     chacha20_xor_file(nonce_stream.stream, fp_db_hash_nonce, hash_nonce_nonce,
+                       encryption_key, false);
+     chacha20_xor_file(count_stream.stream, fp_db_count, database_count_nonce,
+                       encryption_key, false);
+     chacha20_xor_file(dir_stream.stream, fp_db_dir, database_dir_nonce,
+                       encryption_key, false);
 
-  /* If the user requested that unencrypted copies of
-     the database files were to be made, then rewind the streams again,
-     copy the contents of the stream into the unencrypted database
-     files and close the unencrypted database files */
-  if (arguments.databaseDir != NULL) {
-    if (arguments.verbose) {
-      printf("Writing unencrypted database files to %s\n", arguments.databaseDir);
-    }
-    rewindStreams(&metadataStream.stream, &nonceStream.stream,
-                  &dirStream.stream, &countStream.stream);
-    createUnencryptedDb(metadataStream.stream, fpuDatabaseHashMetadata);
-    createUnencryptedDb(nonceStream.stream, fpuDatabaseHashNonce);
-    createUnencryptedDb(countStream.stream, fpuDatabaseCount);
-    createUnencryptedDb(dirStream.stream, fpuDatabaseDir);
-    fclose(fpuDatabaseHashMetadata);
-    fclose(fpuDatabaseHashNonce);
-    fclose(fpuDatabaseCount);
-    fclose(fpuDatabaseDir);
-  }
+     /* If the user requested that unencrypted copies of
+        the database files were to be made, then rewind the streams again,
+        copy the contents of the stream into the unencrypted database
+        files and close the unencrypted database files */
+     if (arguments.database_dir != NULL) {
+          if (arguments.verbose) {
+               printf("Writing unencrypted database files to %s\n", arguments.database_dir);
+          }
+          rewind_streams(&metadata_stream.stream, &nonce_stream.stream,
+                         &dir_stream.stream, &count_stream.stream);
+          create_unencrypted_db(metadata_stream.stream, fpu_db_hash_metadata);
+          create_unencrypted_db(nonce_stream.stream, fpu_db_hash_nonce);
+          create_unencrypted_db(count_stream.stream, fpu_db_count);
+          create_unencrypted_db(dir_stream.stream, fpu_db_dir);
+          fclose(fpu_db_hash_metadata);
+          fclose(fpu_db_hash_nonce);
+          fclose(fpu_db_count);
+          fclose(fpu_db_dir);
+     }
 
-  /* Generate the nonce needed to encrypt the master key file. */
-  unsigned char masterKeyNonce[crypto_stream_xchacha20_NONCEBYTES];
-  randombytes_buf(masterKeyNonce, crypto_stream_xchacha20_NONCEBYTES);
+     /* Generate the nonce needed to encrypt the master key file. */
+     unsigned char master_key_nonce[crypto_stream_xchacha20_NONCEBYTES];
+     randombytes_buf(master_key_nonce, crypto_stream_xchacha20_NONCEBYTES);
 
-  /* Print to the file the nonce and salt needed to decrypt
-     the master key file.*/
-  fwrite(masterKeySalt, 1, crypto_pwhash_SALTBYTES,
-         fpMasterKey);
-  fwrite(masterKeyNonce, 1, crypto_stream_xchacha20_NONCEBYTES,
-         fpMasterKey);
+     /* Print to the file the nonce and salt needed to decrypt
+        the master key file.*/
+     fwrite(master_key_salt, 1, crypto_pwhash_SALTBYTES,
+            fp_master_key);
+     fwrite(master_key_nonce, 1, crypto_stream_xchacha20_NONCEBYTES,
+            fp_master_key);
 
-  /* Populate the masterKeyStream with all the needed information
-     that will be encrypted: master key, nonces for the database
-     files, and salts for the subkeys. */
-  fprintf(masterKeyStream.stream, masterKey);
-  fwrite(encryptionSalt, 1, crypto_pwhash_SALTBYTES,
-         masterKeyStream.stream);
-  fwrite(hashSalt, 1, crypto_pwhash_SALTBYTES,
-         masterKeyStream.stream);
-  fwrite(hashNonceNonce, 1, crypto_stream_chacha20_NONCEBYTES,
-         masterKeyStream.stream);
-  fwrite(hashMetadataNonce, 1, crypto_stream_chacha20_NONCEBYTES,
-         masterKeyStream.stream);
-  fwrite(databaseCountNonce, 1, crypto_stream_chacha20_NONCEBYTES,
-         masterKeyStream.stream);
-  fwrite(databaseDirNonce, 1, crypto_stream_chacha20_NONCEBYTES,
-         masterKeyStream.stream);
+     /* Populate the master_key_stream with all the needed information
+        that will be encrypted: master key, nonces for the database
+        files, and salts for the subkeys. */
+     fprintf(master_key_stream.stream, master_key);
+     fwrite(encryption_salt, 1, crypto_pwhash_SALTBYTES,
+            master_key_stream.stream);
+     fwrite(hash_salt, 1, crypto_pwhash_SALTBYTES,
+            master_key_stream.stream);
+     fwrite(hash_nonce_nonce, 1, crypto_stream_chacha20_NONCEBYTES,
+            master_key_stream.stream);
+     fwrite(hash_metadata_nonce, 1, crypto_stream_chacha20_NONCEBYTES,
+            master_key_stream.stream);
+     fwrite(database_count_nonce, 1, crypto_stream_chacha20_NONCEBYTES,
+            master_key_stream.stream);
+     fwrite(database_dir_nonce, 1, crypto_stream_chacha20_NONCEBYTES,
+            master_key_stream.stream);
   
-  /* Write out and encrypt the master key file which contains
-     the master key and all the nonces for the database
-     files. */
-  chacha20_xor_file(masterKeyStream.stream, fpMasterKey, masterKeyNonce,
-                    masterEncryptionKey, false);
+     /* Write out and encrypt the master key file which contains
+        the master key and all the nonces for the database
+        files. */
+     chacha20_xor_file(master_key_stream.stream, fp_master_key, master_key_nonce,
+                       master_encryption_key, false);
 
-  /* Zero out the memory of sensitive data before
-     exiting the program. */
-  sodium_memzero(masterKeyNonce, sizeof(masterKeyNonce));
-  sodium_memzero(masterKey, sizeof(masterKey));
-  sodium_memzero(hashNonceNonce, sizeof(hashNonceNonce));
-  sodium_memzero(hashMetadataNonce, sizeof(hashMetadataNonce));
-  sodium_memzero(databaseCountNonce, sizeof(databaseCountNonce));
-  sodium_memzero(databaseDirNonce, sizeof(databaseDirNonce));
-  sodium_memzero(masterKeySalt, sizeof(masterKeySalt));
-  sodium_memzero(encryptionSalt, sizeof(encryptionSalt));
-  sodium_memzero(hashSalt, sizeof(hashSalt));
-  sodium_memzero(masterEncryptionKey, sizeof(masterEncryptionKey));
-  sodium_memzero(encryptionKey, sizeof(encryptionKey));
-  sodium_memzero(hashKey, sizeof(hashKey));
+     /* Zero out the memory of sensitive data before
+        exiting the program. */
+     sodium_memzero(master_key_nonce, sizeof(master_key_nonce));
+     sodium_memzero(master_key, sizeof(master_key));
+     sodium_memzero(hash_nonce_nonce, sizeof(hash_nonce_nonce));
+     sodium_memzero(hash_metadata_nonce, sizeof(hash_metadata_nonce));
+     sodium_memzero(database_count_nonce, sizeof(database_count_nonce));
+     sodium_memzero(database_dir_nonce, sizeof(database_dir_nonce));
+     sodium_memzero(master_key_salt, sizeof(master_key_salt));
+     sodium_memzero(encryption_salt, sizeof(encryption_salt));
+     sodium_memzero(hash_salt, sizeof(hash_salt));
+     sodium_memzero(master_encryption_key, sizeof(master_encryption_key));
+     sodium_memzero(encryption_key, sizeof(encryption_key));
+     sodium_memzero(hash_key, sizeof(hash_key));
   
-  /* TODO: Need to cryptofree stuff as well as close all of the streams and files. */
-  tdestroy(dirTree, free);
-  /* Close the streams as they are no longer needed. */
-  cleanupStreams(&metadataStream, &nonceStream, &dirStream, &countStream,
-                 &masterKeyStream);
-  /* Free any remaining allocated data 
-     and close any remaining open files. */
-  free(arguments.outputDir);
-  remove(filesTBEPathname);
-  fclose(filesTBE);
-  fclose(fpDatabaseHashNonce);
-  fclose(fpDatabaseHashMetadata);
-  fclose(fpDatabaseDir);
-  fclose(fpDatabaseCount);
-  fclose(fpMasterKey);
-  return EXIT_SUCCESS;
+     /* TODO: Need to cryptofree stuff as well as close all of the streams and files. */
+     tdestroy(dir_tree, free);
+     /* Close the streams as they are no longer needed. */
+     cleanup_streams(&metadata_stream, &nonce_stream, &dir_stream, &count_stream,
+                     &master_key_stream);
+     /* Free any remaining allocated data 
+        and close any remaining open files. */
+     free(arguments.output_dir);
+     remove(files_tbe_pathname);
+     fclose(files_tbe);
+     fclose(fp_db_hash_nonce);
+     fclose(fp_db_hash_metadata);
+     fclose(fp_db_dir);
+     fclose(fp_db_count);
+     fclose(fp_master_key);
+     return EXIT_SUCCESS;
 }

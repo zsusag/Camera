@@ -2,7 +2,7 @@
  * Title: camera.h
  * Author(s): Zachary John Susag - Grinnell College
  * Date Created: June 30, 2016
-n * Date Revised: July 22, 2017
+ * Date Revised: July 22, 2017
  * Purpose: Serve as the header file for Camera
  *******************************************************************************
  * Copyright (C) 2016,2017 Zachary John Susag
@@ -52,86 +52,98 @@ n * Date Revised: July 22, 2017
    you have already constructed a backup using the default
    names as "camera-decrypt" will not be able to locate
    the files. */
+
 static const char HASH_NONCE_DB_NAME[] = "hashes-nonces";
 static const char HASH_METADATA_DB_NAME[] = "hashes-metadata";
 static const char DIRECTORIES_DB_NAME[] = "directories-map";
 static const char DATABASE_ENTRY_COUNT_NAME[] = "database-count";
 static const char MASTERKEY_NAME[] = "master_key.key";
 
-extern struct argp argpInit;
+extern struct argp argp_init_t;
+
 /* Used by camera-init to communicate with parseOptInit. */
-typedef struct {
-  char **files;
-  char *outputDir;
-  bool silent, verbose;
-  char *inputFile;
-  char *databaseDir;
-} argumentsInit;
 
-extern struct argp argpDecrypt;
+typedef struct {
+     char **files;
+     char *output_dir;
+     bool silent, verbose;
+     char *input_file;
+     char *database_dir;
+} arguments_init_t;
+
+extern struct argp argp_decrypt_t;
+
 /* Used by camera-decrypt to communicate with parseOptDecrypt */
-typedef struct {
-  char *backupDir;
-  char **files;
-  char *outputDir;
-  bool silent, verbose, all;
-  char *inputFile;
-} argumentsDecrypt;
 
-extern struct argp argpUpdate;
-/* Used by camera-update to communicate with parseOptUpdate */
 typedef struct {
-  char *backupDir;
-  char *modFile;
-  char *delFile;
-  bool silent, verbose;
-  char *databaseDir;
-} argumentsUpdate;
+     char *backup_dir;
+     char **files;
+     char *output_dir;
+     bool silent, verbose, all;
+     char *input_file;
+} arguments_decrypt_t;
+
+extern struct argp argp_update_t;
+
+/* Used by camera-update to communicate with parseOptUpdate */
+
+typedef struct {
+     char *backup_dir;
+     char *mod_file;
+     char *del_file;
+     bool silent, verbose;
+     char *database_dir;
+} arguments_update_t;
 
 /* This structure is used to store
    all of the metadata information about
    a file. */
+
 typedef struct {
-  char hash[HASH_AS_HEX_SIZE + 1];
-  char nonce[NONCE_AS_HEX_SIZE + 1];
-  ino_t inode;
-  dev_t device;
-  mode_t mode;
-  uid_t uid;
-  gid_t guid;
-  time_t accessTime;
-  time_t modTime;
-  char *pathname;
-  bool copy;
-  int index;
-  char *metadata;
-} dbEntry;
+     char hash[HASH_AS_HEX_SIZE + 1];
+     char nonce[NONCE_AS_HEX_SIZE + 1];
+     ino_t inode;
+     dev_t device;
+     mode_t mode;
+     uid_t uid;
+     gid_t guid;
+     time_t access_time;
+     time_t mod_time;
+     char *pathname;
+     bool copy;
+     int index;
+     char *metadata;
+} db_entry_t;
 
 /* This structure is used to store the information
    necessary to construct the binary tree
    within camera-update. */
+
 typedef struct {
-  char hash[HASH_AS_HEX_SIZE + 1];
-  char *metadata;
-  char nonce[NONCE_AS_HEX_SIZE + 1];
-  int index;
-} treeNode;
+     char hash[HASH_AS_HEX_SIZE + 1];
+     char *metadata;
+     char nonce[NONCE_AS_HEX_SIZE + 1];
+     int index;
+} tree_node_t;
 
 /* This structure used to store all the variables
    necessary to construct and maintain a string
    stream. This is used in each of the programs. */ 
+
 typedef struct {
-  char *string;
-  FILE *stream;
-  size_t size;
-} streamStruct;
+     char *string;
+     FILE *stream;
+     size_t size;
+} stream_struct_t;
+
 /* 
    This function takes in a string, the secret key, as keyString
    and computes its hash based upon the unsigned characters
    that correspond to the string. The hash, of size outLen, is then inserted
    into keyHash.
 */
-void keyToHash(char *keyString, unsigned char *keyHash, size_t outLen);
+
+void key_to_hash(char *key_string, unsigned char *key_hash, size_t outlen);
 
 /* 
    This function takes as inputs a full pathname, hashesDir,
@@ -140,14 +152,16 @@ void keyToHash(char *keyString, unsigned char *keyHash, size_t outLen);
    It constructs and returns the full pathname, outputDir, for
    the corresponding encrypted file.
 */
-void createEncryptedFileName(char *outputDir, char *hashesDir, char *hash); 
+void create_encrypted_file_name(char *output_dir, char *hashes_dir, char *hash); 
+
 /* 
    This function will xor the given file, fpInput, thus either encrypting it,
    or decrypting it, and storing the result in fpOutput. It will automatically
    keep track of the block counter and zero out the memory before completing
    fully.
 */
-void chacha20_xor_file(FILE *fpInput, FILE *fpOutput,
+
+void chacha20_xor_file(FILE *fp_input, FILE *fp_output,
                        unsigned char *nonce, unsigned char *key, bool decrypt);
 
 /*
@@ -158,7 +172,7 @@ void chacha20_xor_file(FILE *fpInput, FILE *fpOutput,
   into the file, "filesTBE".
 */
 
-void fileFinder(char *path, FILE *filesTBE);
+void find_files(char *path, FILE *files_tbe);
 
 /*
   This function is mainly an extension of the 
@@ -184,7 +198,7 @@ ssize_t readline(char **lineptr,  FILE *stream);
   along with all the subdirectories contained within.
 */
 
-void createOutputDirectory(char *hashesDirPath, char *outputDir, bool verbose, bool init);
+void create_output_directory(char *hashesDirPath, char *output_dir, bool verbose, bool init);
 
 /*
   This function is a comparison function for use with
@@ -195,7 +209,7 @@ void createOutputDirectory(char *hashesDirPath, char *outputDir, bool verbose, b
   alphanumeric order.
 */
 
-int hashCompare (const void * a, const void * b);
+int hash_compare (const void * a, const void * b);
 
 /*
   This function will take the contents of
@@ -207,10 +221,10 @@ int hashCompare (const void * a, const void * b);
   stream cipher.
 */
 
-unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database,
-                            unsigned char *encryptionKey, unsigned char *hashKey,
-                            unsigned int cursor, bool init, void **treeDir,
-                            bool verbose, bool silent, int fileCount);
+unsigned int hash_and_encrypt(char *output_dir, FILE *files_tbe, db_entry_t *database,
+                              unsigned char *encryptionKey, unsigned char *hash_key,
+                              unsigned int cursor, bool init, void **tree_dir,
+                              bool verbose, bool silent, int file_count);
 
 /*
   This function will first
@@ -220,11 +234,11 @@ unsigned int hashAndEncrypt(char *outputDir, FILE *filesTBE, dbEntry *database,
   After the key is stored, the terminal
   is restored to it's previous state with
   echoing turned on. Addiditionally, the nonce
-will be created by hashing the key and the result
-will be stored within nonce.
+  will be created by hashing the key and the result
+  will be stored within nonce.
 */
 
-ssize_t getpassSafe (char **key);
+ssize_t get_pass_safe (char **key);
 
 /*
   This function is a comparison function for use with
@@ -237,7 +251,7 @@ ssize_t getpassSafe (char **key);
   the pathnames of the two files, returning an integer.
 */
 
-int dirTreeCmpFunc (const void *a, const void *b);
+int dir_tree_cmp_func (const void *a, const void *b);
 
 /*
   This function will compare the "hash" given
@@ -249,7 +263,7 @@ int dirTreeCmpFunc (const void *a, const void *b);
   until it does not find a match.
 */ 
 
-void nonceCopierNext(dbEntry *database, int index, char *hash, char *nonce);
+void nonce_copier_next(db_entry_t *database, int index, char *hash, char *nonce);
 
 /*
   This function will compare the "hash" given
@@ -261,7 +275,7 @@ void nonceCopierNext(dbEntry *database, int index, char *hash, char *nonce);
   until it does not find a match.
 */
 
-void nonceCopierPrev(dbEntry *database, int index, char *hash, char *nonce);
+void nonce_copier_prev(db_entry_t *database, int index, char *hash, char *nonce);
 
 /*
   This function will parse the information in "token",
@@ -274,7 +288,7 @@ void nonceCopierPrev(dbEntry *database, int index, char *hash, char *nonce);
   file.
 */
 
-void readInDatabase(dbEntry *currentEntry, char *token, bool metadata);
+void read_in_database(db_entry_t *current_entry, char *token, bool metadata);
 
 /*
   This function will take in a path to a 
@@ -288,7 +302,7 @@ void readInDatabase(dbEntry *currentEntry, char *token, bool metadata);
   and permissions according to the entry within "dirDb". 
 */
 
-int mkdir_p(char *path, char *outputDir, dbEntry *dirDb, size_t dirCounter, bool verbose);
+int mkdir_p(char *path, char *output_dir, db_entry_t *dirDb, size_t dirCounter, bool verbose);
 
 /*
   This function is a helper function for 
@@ -299,7 +313,7 @@ int mkdir_p(char *path, char *outputDir, dbEntry *dirDb, size_t dirCounter, bool
   directory.
 */
 
-void mkdir_pHelper(char *newPath, size_t outputDirLen, dbEntry *dirDb, size_t dirCounter, bool verbose);
+void mkdir_p_helper(char *newPath, size_t outputDirLen, db_entry_t *dirDb, size_t dirCounter, bool verbose);
 
 /*
   This function takes in a path to a recently
@@ -313,7 +327,7 @@ void mkdir_pHelper(char *newPath, size_t outputDirLen, dbEntry *dirDb, size_t di
   database file.
 */
 
-void dirTimestampUpdater( char *path, char *outputDir, dbEntry *dirDb, size_t dirCounter);
+void dir_timestamp_updater( char *path, char *output_dir, db_entry_t *dirDb, size_t dirCounter);
 
 /*
   This function will actually decrypt the file
@@ -326,7 +340,7 @@ void dirTimestampUpdater( char *path, char *outputDir, dbEntry *dirDb, size_t di
   backup is being decrypted.
 */
 
-int decryptFile(dbEntry *metadataEntry, dbEntry *dirDb, char *backupDir, char *outputDir, unsigned char *key, bool all);
+int decrypt_file(db_entry_t *metadata_entry, db_entry_t *dirDb, char *backup_dir, char *output_dir, unsigned char *key, bool all);
 
 /*
   This function is essentially a cryptographically
@@ -338,7 +352,7 @@ int decryptFile(dbEntry *metadataEntry, dbEntry *dirDb, char *backupDir, char *o
   update the metadata of the newly copied file.
 */
 
-int copyDecryptedFile(dbEntry *metadataEntry, char *inputFile, char *outputDir);
+int copy_decrypted_file(db_entry_t *metadata_entry, char *input_file, char *output_dir);
 
 /*
   This function will update the metadata
@@ -349,7 +363,7 @@ int copyDecryptedFile(dbEntry *metadataEntry, char *inputFile, char *outputDir);
   permissions, and the timestamps of the file.
 */
 
-void updateFileMetadata(dbEntry *metadataEntry, char *outputFilePath);
+void update_file_metadata(db_entry_t *metadata_entry, char *outputFilePath);
 
 /*
   This function will collect
@@ -358,7 +372,7 @@ void updateFileMetadata(dbEntry *metadataEntry, char *outputFilePath);
   the binary tree pointed to by "treeDir".
 */
 
-void addDirToTree(char *dirPath, char *dirCheck, void ** treeDir);
+void add_dir_to_tree(char *dirPath, char *dirCheck, void ** tree_dir);
 
 /*
   This function will construct the pathnames
@@ -370,9 +384,9 @@ void addDirToTree(char *dirPath, char *dirCheck, void ** treeDir);
   the strings as necessary.
 */
 
-void constructDatabasePaths(char *hashesDir, size_t hashesDirLen, char *dbHashNoncePath,
-                            char *dbHashMetadataPath, char *dbDirPath, char *databaseCountPath,
-                            char *masterKeyPath, bool unencrypted);
+void construct_database_paths(char *hashes_dir, size_t hashes_dirLen, char *db_hash_nonce_path,
+                              char *db_hash_metadata_path, char *db_dir_path, char *database_count_path,
+                              char *master_key_path, bool unencrypted);
 
 /*
   This function will attempt to open filePath
@@ -380,14 +394,14 @@ void constructDatabasePaths(char *hashesDir, size_t hashesDirLen, char *dbHashNo
   error message will be displayed to STDERR and
   the program will immediately exit.
 */
-void openFile(FILE **fp, char *filePath, char *mode);
+void open_file(FILE **fp, char *file_path, char *mode);
 
 /*
   This function will copy the contents of fpInput
   in blocks of size BLOCK_SIZE into fpOutput until
   fpInput and fpOutput are duplicates of each other.
 */
-void createUnencryptedDb(FILE *fpInput, FILE *fpOutput);
+void create_unencrypted_db(FILE *fp_input, FILE *fp_output);
 
 /*
   This function will rewind each
@@ -395,17 +409,17 @@ void createUnencryptedDb(FILE *fpInput, FILE *fpOutput);
   of the stream. This acts much the same
   way as any other file rewind.
 */
-void rewindStreams(FILE **metadataStream, FILE **nonceStream,
-                   FILE **dirStream, FILE **countStream);
+void rewind_streams(FILE **metadata_stream, FILE **nonce_stream,
+                    FILE **dir_stream, FILE **count_stream);
 /*
   This function will close each stream,
   zero out the strings that they created,
   and then freeing the memory that was allocated
   for those strings.
 */
-void cleanupStreams(streamStruct *metadataStream, streamStruct *nonceStream,
-                    streamStruct *dirStream, streamStruct *countStream,
-                    streamStruct *masterKeyStream);
+void cleanup_streams(stream_struct_t *metadata_stream, stream_struct_t *nonce_stream,
+                     stream_struct_t *dir_stream, stream_struct_t *count_stream,
+                     stream_struct_t *master_key_stream);
 /*
   This function will zero out
   the "size" bytes, free data, and then
@@ -414,7 +428,7 @@ void cleanupStreams(streamStruct *metadataStream, streamStruct *nonceStream,
   malloc or realloc in some way as free
   is called.
 */
-void cryptoFree(void *data, size_t size);
+void crypto_free(void *data, size_t size);
 
 /*
   This function will determine whether
@@ -426,11 +440,12 @@ void cryptoFree(void *data, size_t size);
   within said directory and place each file's path
   into outputFile, one per line.
 */
-void collectFilesTBE(char *pathname, FILE *outputFile);
+void collect_files_tbe(char *pathname, FILE *output_file);
 
-/* This function will derive
-   a subkey based upon the master key.
- */
-void deriveSubkey(unsigned char *subkey, unsigned long long subkeyLen,
-                  char *masterKey, unsigned char *salt);
+/*
+  This function will derive
+  a subkey based upon the master key.
+*/
+void derive_subkey(unsigned char *subkey, unsigned long long subkey_len,
+                   char *master_key, unsigned char *salt);
 #endif
